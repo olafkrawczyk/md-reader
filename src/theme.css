@@ -1,0 +1,1140 @@
+/* Theme tokens — extensions style only against --mdr-* variables.
+   Light values live on :root; dark overrides under [data-appearance="dark"].
+   The active appearance is resolved by the appearance manager into a
+   data-appearance attribute on <html>. */
+
+:root {
+  /* surfaces */
+  --mdr-color-bg: #ffffff;
+  --mdr-color-bg-elevated: #f5f5f4;
+  --mdr-color-bg-sidebar: #f2f1ee;
+
+  /* text tiers */
+  --mdr-color-fg: #1d1d1f;
+  --mdr-color-fg-secondary: #56565c;
+  --mdr-color-fg-muted: #8e8e93;
+
+  /* accent + interaction fills */
+  --mdr-color-accent: #007aff;
+  --mdr-color-accent-fg: #ffffff;
+  --mdr-color-separator: rgba(0, 0, 0, 0.09);
+  --mdr-fill-hover: rgba(0, 0, 0, 0.045);
+  --mdr-fill-active: rgba(0, 0, 0, 0.08);
+  --mdr-fill-selected: rgba(0, 122, 255, 0.14);
+  --mdr-focus-ring: rgba(0, 122, 255, 0.35);
+
+  /* fonts */
+  --mdr-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    system-ui, sans-serif;
+  --mdr-font-reading: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --mdr-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* type scale (weight must precede size in the font shorthand) */
+  --mdr-text-title: 600 13px / 18px var(--mdr-font-ui);
+  --mdr-text-header: 600 15px / 22px var(--mdr-font-ui);
+  --mdr-text-body: 400 13px / 20px var(--mdr-font-ui);
+  --mdr-text-caption: 400 11px / 16px var(--mdr-font-ui);
+
+  /* content reading comfort (values overridden at runtime by settings) */
+  --mdr-content-font-scale: 1;
+  --mdr-content-tint: var(--mdr-content-tint-default);
+  --mdr-content-tint-default: var(--mdr-color-fg);
+  --mdr-content-tint-sepia: #5b4636;
+  --mdr-content-tint-slate: #3f4c5d;
+  --mdr-content-tint-high-contrast: #000000;
+  --mdr-content-line-height: 1.6;
+  --mdr-content-measure: 46rem;
+
+  /* syntax (token-driven so editor and reader highlight restyle live) */
+  --mdr-syntax-keyword: #ad3da4;
+  --mdr-syntax-string: #d12f1b;
+  --mdr-syntax-comment: #707f8c;
+  --mdr-syntax-constant: #272ad8;
+  --mdr-syntax-entity: #3e8087;
+
+  /* rhythm */
+  --mdr-space-1: 4px;
+  --mdr-space-2: 8px;
+  --mdr-space-3: 16px;
+  --mdr-space-4: 24px;
+  --mdr-radius: 6px;
+  --mdr-radius-sheet: 12px;
+  --mdr-row-height: 28px;
+}
+
+[data-appearance="dark"] {
+  --mdr-color-bg: #1d1d1f;
+  --mdr-color-bg-elevated: #2a2a2c;
+  --mdr-color-bg-sidebar: #232325;
+
+  --mdr-color-fg: #f5f5f7;
+  --mdr-color-fg-secondary: #b0b0b5;
+  --mdr-color-fg-muted: #78787d;
+
+  --mdr-color-accent: #6cb2ff;
+  --mdr-color-accent-fg: #10233a;
+  --mdr-color-separator: rgba(255, 255, 255, 0.12);
+  --mdr-fill-hover: rgba(255, 255, 255, 0.07);
+  --mdr-fill-active: rgba(255, 255, 255, 0.12);
+  --mdr-fill-selected: rgba(108, 178, 255, 0.25);
+  --mdr-focus-ring: rgba(108, 178, 255, 0.5);
+
+  --mdr-syntax-keyword: #fc5fa3;
+  --mdr-syntax-string: #fc6a5d;
+  --mdr-syntax-comment: #6c7986;
+  --mdr-syntax-constant: #d0bf69;
+  --mdr-syntax-entity: #41a1c0;
+
+  /* dark-appearance variants of the content tints (default/sepia/slate/
+     high-contrast) — the composite --mdr-content-tint follows automatically */
+  --mdr-content-tint-default: var(--mdr-color-fg);
+  --mdr-content-tint-sepia: #d6b98c;
+  --mdr-content-tint-slate: #b6c6d6;
+  --mdr-content-tint-high-contrast: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  background: var(--mdr-color-bg);
+  overflow: hidden;
+}
+
+body.mdr-dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mdr-focus-ring);
+  outline-offset: -1px;
+}
+
+/* ---- control vocabulary ---- */
+
+.mdr-quiet-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--mdr-radius);
+  background: none;
+  color: var(--mdr-color-fg-secondary);
+  cursor: default;
+}
+
+.mdr-quiet-button:hover {
+  background: var(--mdr-fill-hover);
+  color: var(--mdr-color-fg);
+}
+
+.mdr-quiet-button:active {
+  background: var(--mdr-fill-active);
+}
+
+.mdr-segmented {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--mdr-fill-active);
+  border-radius: 7px;
+}
+
+.mdr-segmented-item {
+  padding: 3px 12px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  font: var(--mdr-text-caption);
+  color: var(--mdr-color-fg-secondary);
+  text-transform: capitalize;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.mdr-segmented-item[data-checked="true"] {
+  background: var(--mdr-color-bg);
+  color: var(--mdr-color-fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.mdr-switch {
+  position: relative;
+  width: 36px;
+  height: 21px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: var(--mdr-fill-active);
+  cursor: default;
+  transition: background 140ms ease;
+}
+
+.mdr-switch[data-checked="true"] {
+  background: var(--mdr-color-accent);
+}
+
+.mdr-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 140ms ease;
+}
+
+.mdr-switch[data-checked="true"] .mdr-switch-knob {
+  transform: translateX(15px);
+}
+
+.mdr-pulldown,
+.mdr-text-field {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  background: var(--mdr-color-bg);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+  padding: 4px 8px;
+}
+
+.mdr-pulldown {
+  text-transform: capitalize;
+  cursor: default;
+}
+
+.mdr-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mdr-space-2);
+}
+
+.mdr-stepper-value {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  min-width: 2.5ch;
+  text-align: right;
+}
+
+.mdr-stepper-buttons {
+  display: flex;
+  flex-direction: column;
+  background: var(--mdr-color-bg);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+  overflow: hidden;
+}
+
+.mdr-stepper-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 13px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: var(--mdr-text-caption);
+  line-height: 1;
+  color: var(--mdr-color-fg-secondary);
+  cursor: default;
+}
+
+.mdr-stepper-button:hover:not(:disabled) {
+  background: var(--mdr-fill-hover);
+  color: var(--mdr-color-fg);
+}
+
+.mdr-stepper-button:disabled {
+  color: var(--mdr-color-fg-muted);
+}
+
+.mdr-stepper-button + .mdr-stepper-button {
+  border-top: 1px solid var(--mdr-color-separator);
+}
+
+.mdr-primary-button {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-accent-fg);
+  background: var(--mdr-color-accent);
+  border: none;
+  border-radius: var(--mdr-radius);
+  padding: var(--mdr-space-2) var(--mdr-space-3);
+  cursor: default;
+}
+
+.mdr-primary-button:hover {
+  background: color-mix(in srgb, var(--mdr-color-accent) 88%, var(--mdr-color-fg));
+}
+
+/* ---- app frame ---- */
+
+.mdr-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.mdr-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- unified toolbar ---- */
+
+.mdr-toolbar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: var(--mdr-color-bg-elevated);
+  border-bottom: 1px solid var(--mdr-color-separator);
+}
+
+/* Top row: hosts the overlaid traffic lights; drag region. */
+.mdr-titlebar-band {
+  height: 28px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.mdr-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--mdr-space-2);
+  height: 52px;
+  padding: 0 var(--mdr-space-3);
+}
+
+.mdr-workspace-name {
+  font: var(--mdr-text-title);
+  color: var(--mdr-color-fg-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
+}
+
+.mdr-toolbar-spacer {
+  flex: 1;
+  align-self: stretch;
+}
+
+.mdr-status {
+  font: var(--mdr-text-caption);
+  color: var(--mdr-color-fg-muted);
+  white-space: nowrap;
+}
+
+.mdr-status[data-tone="error"] {
+  color: #e0362c;
+}
+
+[data-appearance="dark"] .mdr-status[data-tone="error"] {
+  color: #ff6961;
+}
+
+/* ---- content column: tab strip + main region ---- */
+
+.mdr-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- tab strip ---- */
+
+.mdr-tabstrip {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 36px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--mdr-color-bg-elevated);
+  border-bottom: 1px solid var(--mdr-color-separator);
+}
+
+.mdr-tabstrip::-webkit-scrollbar {
+  display: none;
+}
+
+.mdr-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--mdr-space-2);
+  padding: 0 var(--mdr-space-2) 0 var(--mdr-space-3);
+  min-width: 0;
+  max-width: 200px;
+  flex: 0 1 auto;
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg-secondary);
+  background: none;
+  border: none;
+  border-right: 1px solid var(--mdr-color-separator);
+  cursor: default;
+}
+
+.mdr-tab:hover {
+  background: var(--mdr-fill-hover);
+}
+
+.mdr-tab[data-active="true"] {
+  color: var(--mdr-color-fg);
+  background: var(--mdr-color-bg);
+  box-shadow: inset 0 2px 0 var(--mdr-color-accent);
+}
+
+.mdr-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mdr-tab[data-preview="true"] .mdr-tab-name {
+  font-style: italic;
+}
+
+.mdr-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--mdr-color-fg-muted);
+  cursor: default;
+}
+
+.mdr-tab-close:hover {
+  background: var(--mdr-fill-active);
+  color: var(--mdr-color-fg);
+}
+
+.mdr-tab-dirty {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--mdr-color-fg-secondary);
+  cursor: default;
+}
+
+/* ---- sidebar region ---- */
+
+.mdr-sidebar-region {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--mdr-color-bg-sidebar);
+  border-right: 1px solid var(--mdr-color-separator);
+  overflow: auto;
+  padding: var(--mdr-space-2);
+}
+
+.mdr-sidebar-resizer {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.mdr-sidebar-resizer:hover,
+body.mdr-resizing-sidebar .mdr-sidebar-resizer {
+  background: var(--mdr-fill-active);
+}
+
+.mdr-sidebar-empty {
+  margin: auto;
+  text-align: center;
+}
+
+.mdr-sidebar-empty button {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-accent);
+  background: none;
+  border: none;
+  padding: var(--mdr-space-1);
+  cursor: default;
+}
+
+.mdr-sidebar-empty button:hover {
+  text-decoration: underline;
+}
+
+/* ---- main region ---- */
+
+.mdr-main-region {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.mdr-empty {
+  color: var(--mdr-color-fg-muted);
+  padding: var(--mdr-space-4);
+}
+
+/* ---- welcome state ---- */
+
+.mdr-welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mdr-space-2);
+  text-align: center;
+  padding: var(--mdr-space-4);
+}
+
+.mdr-welcome-title {
+  font: var(--mdr-text-header);
+  margin: 0;
+}
+
+.mdr-welcome-caption {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg-muted);
+  margin: 0 0 var(--mdr-space-3);
+}
+
+/* ---- split layout ---- */
+
+.mdr-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.mdr-split-slot {
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mdr-divider {
+  width: 8px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.mdr-divider:hover {
+  background: var(--mdr-fill-active);
+}
+
+/* ---- panes ---- */
+
+.mdr-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.mdr-pane[data-focused="true"] {
+  box-shadow: inset 0 0 0 1px var(--mdr-color-separator);
+}
+
+/* ---- file explorer ---- */
+
+.mdr-explorer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.mdr-explorer-tree {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--mdr-space-1);
+}
+
+.mdr-explorer-actionbar {
+  display: flex;
+  align-items: center;
+  gap: var(--mdr-space-1);
+  flex-shrink: 0;
+  padding: var(--mdr-space-1);
+  border-top: 1px solid var(--mdr-color-separator);
+}
+
+.mdr-explorer-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.mdr-explorer-filter .mdr-explorer-search {
+  padding-right: 24px;
+}
+
+.mdr-explorer-filter-clear {
+  position: absolute;
+  right: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--mdr-fill-hover);
+  color: var(--mdr-color-fg-muted);
+  cursor: default;
+}
+
+.mdr-explorer-filter-clear:hover {
+  color: var(--mdr-color-fg);
+}
+
+.mdr-explorer-search {
+  width: 100%;
+  height: 24px;
+  padding: 0 var(--mdr-space-2);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+  background: var(--mdr-color-bg);
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+}
+
+.mdr-explorer-search::placeholder {
+  color: var(--mdr-color-fg-muted);
+}
+
+.mdr-explorer-search:focus-visible {
+  outline: none;
+  border-color: var(--mdr-color-accent);
+  box-shadow: 0 0 0 2px var(--mdr-focus-ring);
+}
+
+.mdr-explorer ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mdr-explorer ul ul {
+  padding-left: var(--mdr-space-3);
+}
+
+.mdr-explorer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--mdr-space-1);
+  width: 100%;
+  height: var(--mdr-row-height);
+  padding: 0 var(--mdr-space-1);
+  border: none;
+  border-radius: var(--mdr-radius);
+  background: none;
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  text-align: left;
+  cursor: default;
+}
+
+.mdr-explorer-row:hover {
+  background: var(--mdr-fill-hover);
+}
+
+.mdr-explorer-row[data-selected="true"] {
+  background: var(--mdr-fill-active);
+}
+
+.mdr-explorer-row[data-active="true"] {
+  background: var(--mdr-fill-selected);
+}
+
+.mdr-explorer-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--mdr-color-fg-muted);
+  transition: transform 120ms ease;
+}
+
+.mdr-explorer-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+.mdr-explorer-chevron[data-hidden="true"] {
+  visibility: hidden;
+}
+
+.mdr-explorer-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--mdr-color-accent);
+}
+
+.mdr-explorer-row[data-type="file"] .mdr-explorer-icon {
+  color: var(--mdr-color-fg-muted);
+}
+
+.mdr-explorer-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* file management affordances */
+
+.mdr-explorer-row[data-drop="true"] {
+  background: var(--mdr-fill-selected);
+  box-shadow: inset 0 0 0 1px var(--mdr-focus-ring);
+}
+
+nav.mdr-explorer[data-drop="true"] {
+  box-shadow: inset 0 0 0 2px var(--mdr-focus-ring);
+}
+
+.mdr-explorer-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--mdr-space-1) var(--mdr-space-1) calc(var(--mdr-space-3) + var(--mdr-space-1));
+}
+
+.mdr-explorer-inline-input {
+  width: 100%;
+  height: 24px;
+  padding: 0 var(--mdr-space-2);
+  border: 1px solid var(--mdr-color-accent);
+  border-radius: var(--mdr-radius);
+  background: var(--mdr-color-bg);
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+}
+
+.mdr-explorer-inline-input::placeholder {
+  color: var(--mdr-color-fg-muted);
+}
+
+.mdr-explorer-inline-input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--mdr-focus-ring);
+}
+
+.mdr-explorer-inline-error {
+  font: var(--mdr-text-caption);
+  color: #e0362c;
+}
+
+[data-appearance="dark"] .mdr-explorer-inline-error {
+  color: #ff6961;
+}
+
+.mdr-explorer-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 160px;
+  padding: var(--mdr-space-1);
+  background: var(--mdr-color-bg);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.mdr-explorer-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--mdr-space-1) var(--mdr-space-2);
+  border: none;
+  border-radius: var(--mdr-radius);
+  background: none;
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  text-align: left;
+  cursor: default;
+}
+
+.mdr-explorer-menu-item:hover {
+  background: var(--mdr-fill-hover);
+}
+
+/* ---- reading pane ---- */
+
+.mdr-reader {
+  font-family: var(--mdr-font-reading);
+  font-size: calc(1em * var(--mdr-content-font-scale));
+  color: var(--mdr-content-tint);
+  line-height: var(--mdr-content-line-height);
+  max-inline-size: var(--mdr-content-measure);
+  margin-inline: auto;
+  padding: 40px 48px;
+}
+
+.mdr-reader pre {
+  font-family: var(--mdr-font-mono);
+  font-size: 0.875em;
+  background: var(--mdr-color-bg-elevated);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+  padding: var(--mdr-space-3);
+  overflow: auto;
+}
+
+/* Shiki dual themes: light colors are inline, dark colors ride the
+   --shiki-dark variable and swap with the appearance attribute. */
+.mdr-reader pre.shiki {
+  background-color: var(--mdr-color-bg-elevated) !important;
+}
+
+.mdr-reader .shiki span {
+  background-color: transparent !important;
+}
+
+[data-appearance="dark"] .mdr-reader .shiki span {
+  color: var(--shiki-dark) !important;
+}
+
+.mdr-reader code {
+  font-family: var(--mdr-font-mono);
+}
+
+/* Task ticks: the checkbox replaces the bullet — top-level task lists sit
+ * flush with the content edge instead of reserving the (now empty) marker
+ * gutter; nested lists cascade by one checkbox step. */
+.mdr-reader .contains-task-list {
+  padding-inline-start: 0;
+}
+
+.mdr-reader .contains-task-list ul {
+  padding-inline-start: calc(14px + var(--mdr-space-1));
+}
+
+.mdr-reader li.task-list-item {
+  list-style: none;
+}
+
+.mdr-reader input[type="checkbox"] {
+  inline-size: 14px;
+  block-size: 14px;
+  margin: 0 var(--mdr-space-1) 0 0;
+  vertical-align: -2px;
+  accent-color: var(--mdr-color-accent);
+  cursor: default;
+}
+
+.mdr-reader input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--mdr-focus-ring);
+  outline-offset: 1px;
+}
+
+.mdr-reader input[type="checkbox"]:hover {
+  filter: brightness(1.1);
+}
+
+.mdr-reader a {
+  color: var(--mdr-color-accent);
+}
+
+.mdr-reader blockquote {
+  border-left: 3px solid var(--mdr-color-separator);
+  margin-left: 0;
+  padding-left: var(--mdr-space-3);
+  color: var(--mdr-color-fg-secondary);
+}
+
+.mdr-reader table {
+  border-collapse: collapse;
+}
+
+.mdr-reader th,
+.mdr-reader td {
+  border: 1px solid var(--mdr-color-separator);
+  padding: var(--mdr-space-1) var(--mdr-space-2);
+}
+
+/* ---- editor pane ---- */
+
+.mdr-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.mdr-editor .cm-editor {
+  height: 100%;
+  background: var(--mdr-color-bg);
+}
+
+.mdr-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.mdr-editor .cm-scroller {
+  font-family: var(--mdr-font-mono) !important;
+  font-size: calc(1em * var(--mdr-content-font-scale));
+  color: var(--mdr-content-tint);
+  line-height: var(--mdr-content-line-height);
+}
+
+.mdr-editor .cm-content {
+  padding: 20px 24px;
+  max-inline-size: var(--mdr-content-measure);
+  margin-inline: auto;
+  caret-color: var(--mdr-color-accent);
+}
+
+.mdr-editor .cm-cursor,
+.mdr-editor .cm-dropCursor {
+  border-left-color: var(--mdr-color-accent);
+}
+
+.mdr-editor .cm-selectionBackground,
+.mdr-editor .cm-editor ::selection {
+  background: var(--mdr-fill-selected) !important;
+}
+
+.mdr-editor .cm-gutters {
+  background: var(--mdr-color-bg);
+  border-right: 1px solid var(--mdr-color-separator);
+  color: var(--mdr-color-fg-muted);
+}
+
+/* ---- settings sheet ---- */
+
+.mdr-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 10;
+}
+
+[data-appearance="dark"] .mdr-sheet-backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.mdr-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 96px));
+  max-height: calc(100vh - 96px);
+  background: var(--mdr-color-bg);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius-sheet);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.mdr-sheet-titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--mdr-space-2);
+  padding: var(--mdr-space-2) var(--mdr-space-3);
+  background: var(--mdr-color-bg-elevated);
+  border-bottom: 1px solid var(--mdr-color-separator);
+}
+
+.mdr-sheet-title {
+  flex: 1;
+  font: var(--mdr-text-title);
+  text-align: center;
+}
+
+.mdr-sheet-body {
+  overflow: auto;
+  padding: var(--mdr-space-3);
+}
+
+/* ---- unsaved-changes dialog ---- */
+
+.mdr-dialog-message {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  margin: 0;
+}
+
+.mdr-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--mdr-space-2);
+  margin-top: var(--mdr-space-3);
+}
+
+.mdr-dialog-button {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  background: var(--mdr-fill-hover);
+  border: none;
+  border-radius: var(--mdr-radius);
+  padding: var(--mdr-space-2) var(--mdr-space-3);
+  cursor: default;
+}
+
+.mdr-dialog-button:hover {
+  background: var(--mdr-fill-active);
+}
+
+.mdr-dialog-button[data-danger] {
+  color: #e0362c;
+}
+
+[data-appearance="dark"] .mdr-dialog-button[data-danger] {
+  color: #ff6961;
+}
+
+.mdr-settings-section {
+  margin-bottom: var(--mdr-space-4);
+}
+
+.mdr-settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.mdr-settings-heading {
+  font: var(--mdr-text-caption);
+  text-transform: capitalize;
+  color: var(--mdr-color-fg-muted);
+  margin: 0 0 var(--mdr-space-1) var(--mdr-space-1);
+}
+
+.mdr-settings-group {
+  background: var(--mdr-color-bg-elevated);
+  border-radius: var(--mdr-radius);
+  padding: var(--mdr-space-1) var(--mdr-space-2);
+}
+
+.mdr-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mdr-space-3);
+  min-height: 32px;
+}
+
+.mdr-setting-row + .mdr-setting-row {
+  border-top: 1px solid var(--mdr-color-separator);
+}
+
+.mdr-setting-label {
+  font: var(--mdr-text-body);
+}
+
+/* ---- reading pane fallback for unlabeled code ---- */
+
+.mdr-reader pre:not(.shiki) code {
+  color: var(--mdr-color-fg);
+}
+
+/* ---- find bar ---- */
+
+/* Safari-style: a compact floating field at the top of the content area. */
+.mdr-findbar {
+  position: fixed;
+  top: 48px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--mdr-space-1);
+  padding: var(--mdr-space-1);
+  background: var(--mdr-color-bg-elevated);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius-sheet);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.mdr-findbar-input {
+  width: 180px;
+  height: 24px;
+  padding: 0 var(--mdr-space-2);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+  background: var(--mdr-color-bg);
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+}
+
+.mdr-findbar-input::placeholder {
+  color: var(--mdr-color-fg-muted);
+}
+
+.mdr-findbar-input:focus-visible {
+  outline: none;
+  border-color: var(--mdr-color-accent);
+  box-shadow: 0 0 0 2px var(--mdr-focus-ring);
+}
+
+.mdr-findbar-count {
+  min-width: 64px;
+  text-align: center;
+  font: var(--mdr-text-caption);
+  color: var(--mdr-color-fg-secondary);
+  white-space: nowrap;
+}
+
+/* ---- find match highlighting ---- */
+
+/* Reader: CSS Custom Highlight API — no DOM mutation. */
+::highlight(mdr-find-matches) {
+  background-color: var(--mdr-fill-selected);
+}
+
+::highlight(mdr-find-current) {
+  background-color: color-mix(in srgb, var(--mdr-color-accent) 45%, transparent);
+}
+
+/* Editor: decoration classes from the find highlighter. */
+.mdr-editor .cm-searchMatch {
+  background-color: var(--mdr-fill-selected);
+}
+
+.mdr-editor .cm-searchMatch-current {
+  background-color: color-mix(in srgb, var(--mdr-color-accent) 45%, transparent);
+}

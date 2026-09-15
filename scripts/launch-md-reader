@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Terminal launcher for md-reader. Opens the app installed at
+# /Applications/md-reader.app, or brings the running instance to the
+# foreground — LaunchServices deduplicates the no-argument case.
+#
+# The installed path is targeted explicitly (not `open -a`) so the
+# launcher never resolves to a stale build-output copy of the bundle.
+#
+# With a path argument the bundle's inner binary is executed directly so
+# the path reaches the app's own argument parser: `open` without --args
+# treats the argument as a document, and `open --args` drops it entirely
+# when an instance is already running. Relative paths (e.g. `.`) are
+# resolved against the caller's directory so the app receives an
+# absolute path. The app's single-instance guard forwards the path to
+# any running instance and exits the duplicate.
+APP="/Applications/md-reader.app"
+BIN="$APP/Contents/MacOS/md-reader"
+
+case "${1:-}" in
+  -h|--help)
+    cat <<'EOF'
+md-reader — markdown reader
+
+Usage: md-reader [path]
+
+  md-reader            Open the app, or bring a running instance to the foreground
+  md-reader <path>     Open a file (with its parent folder as workspace) or a folder
+  md-reader --help     Show this help
+EOF
+    exit 0
+    ;;
+esac
+
+if [ "$#" -gt 0 ]; then
+  if [ -x "$BIN" ]; then
+    args=()
+    for arg in "$@"; do
+      case "$arg" in
+        /*) args+=("$arg") ;;
+        *) args+=("$(cd "$arg" 2>/dev/null && pwd || printf '%s' "$PWD/$arg")") ;;
+      esac
+    done
+    exec "$BIN" "${args[@]}"
+  fi
+  exec open -a "$APP" --args "$@"
+fi
+
+if [ -d "$APP" ]; then
+  exec open "$APP"
+fi
+exec open -a "md-reader"
