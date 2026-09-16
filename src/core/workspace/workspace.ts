@@ -19,6 +19,7 @@ type TreeListener = (tree: readonly FileEntry[]) => void;
 type DocumentDeletedListener = (document: Document) => void;
 type DocumentOpenedListener = (document: Document) => void;
 type DocumentsRetargetedListener = (moves: readonly PathMove[]) => void;
+type PathsModifiedListener = (paths: readonly string[]) => void;
 
 /** One open document's file moved from `from` to `to` (rename or move). */
 export interface PathMove {
@@ -38,6 +39,7 @@ export class Workspace {
   readonly #deletedListeners = new Set<DocumentDeletedListener>();
   readonly #openedListeners = new Set<DocumentOpenedListener>();
   readonly #retargetedListeners = new Set<DocumentsRetargetedListener>();
+  readonly #modifiedListeners = new Set<PathsModifiedListener>();
   readonly #documents = new Map<string, Document>();
   readonly #deletedPaths = new Set<string>();
   #root: string | null = null;
@@ -194,7 +196,19 @@ export class Workspace {
       await this.#rescan();
     }
     const touched = new Set<string>([...event.changed, ...event.modified]);
+    if (event.modified.length > 0) {
+      const modified = [...event.modified];
+      for (const listener of this.#modifiedListeners) {
+        listener(modified);
+      }
+    }
     await this.#reloadModified(touched);
+  }
+
+  /** Notified with content-modified paths after each watcher batch. */
+  onPathsModified(listener: PathsModifiedListener): () => void {
+    this.#modifiedListeners.add(listener);
+    return () => this.#modifiedListeners.delete(listener);
   }
 
   /** Re-reads open, clean documents whose files appear in the batch. */

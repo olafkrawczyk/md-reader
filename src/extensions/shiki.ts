@@ -1,12 +1,53 @@
-import { createHighlighter } from "shiki";
-import type { Highlighter } from "shiki";
+import { createHighlighterCore } from "shiki/core";
+import type { HighlighterCore, LanguageRegistration } from "shiki";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { budgetedMemo } from "../core/budgetedMemo";
 import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
 import { highlightCodeKey } from "./markdownContract";
 import type { HighlightCode } from "./markdownContract";
 
+import langTypescript from "shiki/langs/typescript.mjs";
+import langJavascript from "shiki/langs/javascript.mjs";
+import langPython from "shiki/langs/python.mjs";
+import langRust from "shiki/langs/rust.mjs";
+import langBash from "shiki/langs/bash.mjs";
+import langJson from "shiki/langs/json.mjs";
+import langHtml from "shiki/langs/html.mjs";
+import langCss from "shiki/langs/css.mjs";
+import langMarkdown from "shiki/langs/markdown.mjs";
+import langYaml from "shiki/langs/yaml.mjs";
+
+import themeLight from "shiki/themes/github-light.mjs";
+import themeDark from "shiki/themes/github-dark.mjs";
+
 const THEMES = { light: "github-light", dark: "github-dark" } as const;
+
+// Shiki's dynamic per-language import is async, but the HighlightCode contract
+// is synchronous and called off the render path during post-paint idle slicing.
+// Grammar definitions are imported as static data modules; grammar compilation
+// and regex engine indexing are deferred until a code block of that language
+// is first highlighted on demand.
+const GRAMMARS: Record<string, LanguageRegistration[]> = {
+  typescript: langTypescript,
+  ts: langTypescript,
+  javascript: langJavascript,
+  js: langJavascript,
+  python: langPython,
+  py: langPython,
+  rust: langRust,
+  rs: langRust,
+  bash: langBash,
+  sh: langBash,
+  shell: langBash,
+  zsh: langBash,
+  json: langJson,
+  html: langHtml,
+  css: langCss,
+  markdown: langMarkdown,
+  md: langMarkdown,
+  yaml: langYaml,
+  yml: langYaml,
+};
 
 /**
  * Highlighting costs ~8.5ms per KB of code and scales with bytes, not block
@@ -15,7 +56,7 @@ const THEMES = { light: "github-light", dark: "github-dark" } as const;
  * this service afterwards to swap in highlighted markup block by block.
  */
 async function activate(api: ExtensionApi): Promise<void> {
-  let highlighter: Highlighter | null = null;
+  let highlighter: HighlighterCore | null = null;
 
   // Edits reparse the whole document, so every keystroke re-runs this pass over
   // every block — but only the edited block's text actually changed. Keyed by
@@ -30,35 +71,35 @@ async function activate(api: ExtensionApi): Promise<void> {
     if (hl === null || lang === "") {
       return null;
     }
-    return memo(`${lang}\0${code}`, () => {
+    const langKey = lang.toLowerCase();
+    return memo(`${langKey}\0${code}`, () => {
       try {
+        const loaded = hl.getLoadedLanguages();
+        if (!loaded.includes(langKey) && !loaded.includes(hl.resolveLangAlias(langKey) ?? langKey)) {
+          const grammar = GRAMMARS[langKey];
+          if (!grammar) {
+            return null;
+          }
+          hl.loadLanguageSync(grammar);
+        }
         // Dual themes: light colors inline, dark on --shiki-dark; the
         // stylesheet swaps them off [data-appearance]. Both palettes sit in
         // the markup, so an appearance change never invalidates a cached block.
-        return hl.codeToHtml(code, { lang, themes: THEMES, defaultColor: "light" });
+        return hl.codeToHtml(code, { lang: langKey, themes: THEMES, defaultColor: "light" });
       } catch {
         // Highlighting is best-effort per block; the miss is cached too, so an
         // unknown language costs one throw rather than one per keystroke.
+        // ponytail: fixed fallback to null on syntax errors; upgrade when
+        // custom error markup or inline diagnostics are required.
         return null;
       }
     });
   };
 
-  highlighter = await createHighlighter({
-    themes: [THEMES.light, THEMES.dark],
-    langs: [
-      "typescript",
-      "javascript",
-      "python",
-      "rust",
-      "bash",
-      "json",
-      "html",
-      "css",
-      "markdown",
-      "yaml",
-    ],
-    engine: createJavaScriptRegexEngine(),
+  highlighter = await createHighlighterCore({
+    themes: [themeLight, themeDark],
+    langs: [],
+    engine: createJavaScriptRegexEngine({ target: "ES2018" }),
   });
 
   // Registered only once the highlighter is ready — consumers re-run when

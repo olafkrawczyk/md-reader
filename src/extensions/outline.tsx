@@ -13,23 +13,49 @@ import { OutlineIcon } from "../core/ui/icons";
 import { QuietButton } from "../core/ui/controls";
 
 export interface OutlineJumpTarget {
-  scrollToHeading(id: string, line: number): void;
+  /** False when the location is not in the DOM yet, so the jump is retried. */
+  scrollToHeading(id: string, line: number): boolean;
+}
+
+/**
+ * A jump into a document that may not be routed to its panes yet (opening a
+ * link, a search hit, a backlink). Published as state rather than delivered
+ * as a call: panes retry it on every render until one lands, which is what
+ * makes "open file, then scroll to line" reliable without timers.
+ */
+export interface PendingJump {
+  readonly path: string;
+  readonly id: string;
+  readonly line: number;
 }
 
 export interface OutlineNavigationService {
   readonly activeHeadingId: string | null;
   readonly activeHeadingSource: StoreSource<string | null>;
+  readonly pendingJumpSource: StoreSource<PendingJump | null>;
   setActiveHeading(id: string | null): void;
   registerJumpTarget(target: OutlineJumpTarget): () => void;
-  jumpToHeading(id: string, line: number): void;
+  /**
+   * Omit `path` for a jump inside the document already on screen. Returns
+   * whether a pane scrolled; with a `path` a miss is parked for retry.
+   */
+  jumpToHeading(id: string, line: number, path?: string): boolean;
+  clearPendingJump(jump: PendingJump): void;
 }
+
+export const noPendingJump: StoreSource<PendingJump | null> = storeSource(
+  () => null,
+  () => () => {},
+);
 
 export const outlineNavigationKey = serviceKey<OutlineNavigationService>("mdr.outline.navigation");
 
 export class OutlineNavigationServiceImpl implements OutlineNavigationService {
   readonly #listeners = new Set<(id: string | null) => void>();
   readonly #jumpTargets = new Set<OutlineJumpTarget>();
+  readonly #pendingListeners = new Set<(jump: PendingJump | null) => void>();
   #activeHeadingId: string | null = null;
+  #pendingJump: PendingJump | null = null;
 
   get activeHeadingId(): string | null {
     return this.#activeHeadingId;
@@ -62,12 +88,72 @@ export class OutlineNavigationServiceImpl implements OutlineNavigationService {
     };
   }
 
-  jumpToHeading(id: string, line: number): void {
+  readonly pendingJumpSource: StoreSource<PendingJump | null> = storeSource(
+    () => this.#pendingJump,
+    (listener) => {
+      this.#pendingListeners.add(listener);
+      return () => {
+        this.#pendingListeners.delete(listener);
+      };
+    },
+  );
+
+  jumpToHeading(id: string, line: number, path?: string): boolean {
     this.setActiveHeading(id);
+    let landed = false;
     for (const target of this.#jumpTargets) {
-      target.scrollToHeading(id, line);
+      if (target.scrollToHeading(id, line)) {
+        landed = true;
+      }
+    }
+    // A cross-document jump usually misses here: the tab has opened but the
+    // panes have not re-rendered for the new document. Park it so the pane
+    // claims it when it mounts with that document; a same-document jump that
+    // landed needs no retry.
+    if (path !== undefined && !landed) {
+      this.#setPending({ path, id, line });
+    }
+    return landed;
+  }
+
+  /** Called by a pane that has performed (or superseded) the pending jump. */
+  clearPendingJump(jump: PendingJump): void {
+    if (this.#pendingJump === jump) {
+      this.#setPending(null);
     }
   }
+
+  #setPending(jump: PendingJump | null): void {
+    this.#pendingJump = jump;
+    for (const listener of this.#pendingListeners) {
+      listener(jump);
+    }
+  }
+}
+
+/**
+ * Claims a parked cross-document jump once this pane is showing that
+ * document. `content` is whatever the pane re-renders on (rendered html,
+ * document text) — the jump is retried on each change until it lands,
+ * because the target line may not be in the DOM on the first pass.
+ */
+export function usePendingJump(
+  nav: OutlineNavigationService | null,
+  document: Document | null,
+  content: unknown,
+): void {
+  const pending = useStoreValue(nav?.pendingJumpSource ?? noPendingJump);
+  useEffect(() => {
+    if (nav === null || pending === null || document === null) {
+      return;
+    }
+    if (pending.path !== document.path) {
+      return;
+    }
+    if (nav.jumpToHeading(pending.id, pending.line)) {
+      nav.clearPendingJump(pending);
+    }
+  }, [nav, pending, document, content]);
 }
 
 function useDocumentText(document: Document | null): string | null {

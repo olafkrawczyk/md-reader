@@ -172,14 +172,16 @@ function useMatchSelection(api: ExtensionApi) {
   const outlineNav = useService(api.services, outlineNavigationKey);
   return useCallback(
     (match: WorkspaceSearchMatch) => {
-      // Tab first; the jump lands after the document's panes have routed.
+      // Tab first, then the line jump — parked by the nav service until the
+      // opened document's panes have rendered, so no timing assumption here.
       tabs
         .open(match.filePath)
         .then(() => {
-          // Center the matching line in the active editor/reader pane via
-          // the shared line-jump mechanism (design: reuses outline jump
-          // targets, which key on line number).
-          outlineNav?.jumpToHeading(`search:${match.lineNumber}`, match.lineNumber);
+          outlineNav?.jumpToHeading(
+            `search:${match.lineNumber}`,
+            match.lineNumber,
+            match.filePath,
+          );
         })
         .catch((err: unknown) => {
           console.error("failed to open search result", match.filePath, err);

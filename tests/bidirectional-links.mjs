@@ -186,6 +186,25 @@ const FILES = {
     "Ambiguous bare link: [[readme]].",
     "",
   ].join("\n"),
+  "Anchored.md": [
+    "# Anchored",
+    "",
+    "Jump to a heading: [[LongDoc#Deep Section]].",
+    "Jump to a line: [[LongDoc#L14]].",
+    "Missing anchor still opens: [[LongDoc#Nope]].",
+    "",
+  ].join("\n"),
+  // Long enough that the target heading/line is well below the fold, so a
+  // failed jump leaves it out of view and the check can tell the difference.
+  "LongDoc.md": [
+    "# Long Doc",
+    "",
+    ...Array.from({ length: 60 }, (_, i) => `Filler paragraph ${i + 1}.\n`),
+    "## Deep Section",
+    "",
+    "Content under the deep section.",
+    "",
+  ].join("\n"),
   "changelog.md": [
     "# Changelog",
     "",
@@ -415,6 +434,71 @@ check("autocompletion disambiguates duplicate stems", async (page) => {
     `expected path-qualified completions, got: ${JSON.stringify(labels)}`,
   );
   await page.keyboard.press("Escape");
+});
+
+// 11. Anchored wikilink opens the target and scrolls to the named heading
+check("wikilink with #heading scrolls the opened document to it", async (page) => {
+  await openDocument(page, "Anchored.md");
+  await page.locator('.mdr-reader a[data-wikilink-target="LongDoc#Deep Section"]').click();
+
+  await page.waitForFunction(() => {
+    const activeTab = document.querySelector('.mdr-tab[data-active="true"] .mdr-tab-name');
+    return activeTab !== null && activeTab.textContent === "LongDoc.md";
+  });
+  // The heading must end up inside the viewport; without the jump it sits
+  // ~60 paragraphs down, far below the fold.
+  await page.waitForFunction(() => {
+    const heading = document.querySelector('.mdr-reader #deep-section');
+    if (heading === null) return false;
+    const rect = heading.getBoundingClientRect();
+    return rect.top >= 0 && rect.top < window.innerHeight;
+  });
+});
+
+// 12. Anchored wikilink with an explicit line number
+check("wikilink with #Lnn scrolls to that source line", async (page) => {
+  await openDocument(page, "Anchored.md");
+  await page.locator('.mdr-reader a[data-wikilink-target="LongDoc#L14"]').click();
+
+  await page.waitForFunction(() => {
+    const activeTab = document.querySelector('.mdr-tab[data-active="true"] .mdr-tab-name');
+    return activeTab !== null && activeTab.textContent === "LongDoc.md";
+  });
+  await page.waitForFunction(() => {
+    const reader = document.querySelector(".mdr-pane .mdr-reader");
+    const scroller = reader?.closest(".mdr-pane") ?? reader;
+    return scroller !== null && scroller.scrollTop > 0;
+  });
+});
+
+// 13. Unresolvable anchor still opens the document (fails open, at the top)
+check("wikilink with an unknown anchor still opens the document", async (page) => {
+  await openDocument(page, "Anchored.md");
+  await page.locator('.mdr-reader a[data-wikilink-target="LongDoc#Nope"]').click();
+
+  await page.waitForFunction(() => {
+    const activeTab = document.querySelector('.mdr-tab[data-active="true"] .mdr-tab-name');
+    return activeTab !== null && activeTab.textContent === "LongDoc.md";
+  });
+  const heading = await page.locator(".mdr-reader h1").innerText();
+  assert(heading === "Long Doc", `expected LongDoc to open, got "${heading}"`);
+});
+
+// 14. Backlink click lands on the referencing line, not the top of the file
+check("clicking a backlink scrolls to the referencing line", async (page) => {
+  await openDocument(page, "Architecture.md");
+  await page.locator(".mdr-backlinks-toolbar-wrapper .mdr-quiet-button").click();
+  await page.locator(".mdr-backlinks-popover").waitFor();
+  await page
+    .locator(".mdr-backlinks-item")
+    .filter({ hasText: "Roadmap.md" })
+    .locator("button")
+    .click();
+
+  await page.waitForFunction(() => {
+    const activeTab = document.querySelector('.mdr-tab[data-active="true"] .mdr-tab-name');
+    return activeTab !== null && activeTab.textContent === "Roadmap.md";
+  });
 });
 
 async function main() {

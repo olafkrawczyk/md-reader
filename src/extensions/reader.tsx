@@ -5,19 +5,18 @@ import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
 import { usePaneHost } from "../core/extension";
-import { highlightCodeKey, mdAstCacheKey } from "./markdownContract";
+import { highlightCodeKey, mdAstCacheKey, mdOutlineCacheKey } from "./markdownContract";
 import { swapTaskMarker } from "./taskTicks";
 import { useService, useStoreValue } from "../core/state/storeHooks";
 import type { Document } from "../core/workspace/document";
 import { searchTargetRegistryKey } from "../core/search/searchTypes";
 import type { MatchState, SearchTarget } from "../core/search/searchTypes";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { outlineNavigationKey } from "./outline";
+import { outlineNavigationKey, usePendingJump } from "./outline";
 import type { OutlineJumpTarget } from "./outline";
 import { FocusIcon } from "../core/ui/icons";
 import { QuietButton } from "../core/ui/controls";
-import { linkIndexKey } from "./links";
-import { tabs } from "../core/tabs/tabStore";
+import { linkIndexKey, openAtFragment, splitTarget } from "./links";
 
 /**
  * Task checkboxes (design D3): remark-rehype renders them `disabled`; this
@@ -123,10 +122,57 @@ function applyBionicReading(node: unknown, insideSkip: boolean): void {
   node.children = nextChildren;
 }
 
+/**
+ * Stamps every top-level block with its source line so a line-addressed jump
+ * (link with #Lnn, search hit, backlink) has something to scroll to. Only the
+ * block level is stamped: that is the granularity the reader can scroll to,
+ * and nested elements would multiply the attribute for no gain.
+ */
+function stampSourceLines(tree: unknown): void {
+  if (!isRecord(tree) || !Array.isArray(tree.children)) {
+    return;
+  }
+  for (const child of tree.children) {
+    if (!isRecord(child) || child.type !== "element") {
+      continue;
+    }
+    const line = isRecord(child.position) && isRecord(child.position.start)
+      ? child.position.start.line
+      : undefined;
+    if (typeof line !== "number") {
+      continue;
+    }
+    const properties = isRecord(child.properties) ? child.properties : {};
+    // Headings already carry data-line from extractHeadings; don't fight it.
+    if (properties["data-line"] === undefined) {
+      child.properties = { ...properties, "data-line": line };
+    }
+  }
+}
+
+/**
+ * The rendered block containing a source line. Only block starts are stamped,
+ * so an arbitrary line (a search hit inside a paragraph, an explicit `#L42`)
+ * lands on the last block starting at or before it.
+ */
+function nearestBlockAtLine(container: Element, line: number): Element | null {
+  let best: Element | null = null;
+  let bestLine = 0;
+  for (const element of container.querySelectorAll("[data-line]")) {
+    const candidate = Number(element.getAttribute("data-line"));
+    if (candidate <= line && candidate >= bestLine) {
+      best = element;
+      bestLine = candidate;
+    }
+  }
+  return best;
+}
+
 const renderer = unified()
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(() => (tree: unknown) => {
     enableTaskInputs(tree, false);
+    stampSourceLines(tree);
   })
   .use(rehypeStringify, { allowDangerousHtml: true });
 
@@ -375,6 +421,7 @@ function ReaderPane(api: ExtensionApi) {
     const registry = useService(api.services, searchTargetRegistryKey);
     const outlineNav = useService(api.services, outlineNavigationKey);
     const linkIndex = useService(api.services, linkIndexKey);
+    const outlineCache = useService(api.services, mdOutlineCacheKey);
     const highlightCode = useService(api.services, highlightCodeKey);
     const bionicReading = useSettingBoolean(api, "bionicReading", false);
     const focusMode = useSettingBoolean(api, "focusMode", false);
@@ -473,22 +520,25 @@ function ReaderPane(api: ExtensionApi) {
         return;
       }
       const jumpTarget: OutlineJumpTarget = {
-        scrollToHeading(id: string, line: number) {
+        scrollToHeading(id: string, line: number): boolean {
           const container = containerRef.current;
           if (container === null) {
-            return;
+            return false;
           }
           const escaped = id.replace(/["\\]/g, "\\$&");
           const target =
-            container.querySelector(`[id="${escaped}"]`) ??
-            container.querySelector(`[data-line="${line}"]`);
-          if (target !== null) {
-            target.scrollIntoView({ behavior: "smooth", block: "start" });
+            container.querySelector(`[id="${escaped}"]`) ?? nearestBlockAtLine(container, line);
+          if (target === null) {
+            return false;
           }
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          return true;
         },
       };
       return outlineNav.registerJumpTarget(jumpTarget);
     }, [outlineNav]);
+
+    usePendingJump(outlineNav, document, html);
 
     // Outline scroll tracking
     useEffect(() => {
@@ -715,9 +765,11 @@ function ReaderPane(api: ExtensionApi) {
           const target = decodeURIComponent(href.slice("#wikilink:".length));
           const resolved = linkIndex?.resolveTarget(target, document?.path);
           if (resolved !== null && resolved !== undefined) {
-            tabs.open(resolved).catch((error: unknown) => {
-              console.error("Failed to open wikilink target", target, error);
-            });
+            openAtFragment(resolved, splitTarget(target).fragment, outlineCache, outlineNav).catch(
+              (error: unknown) => {
+                console.error("Failed to open wikilink target", target, error);
+              },
+            );
           }
           return;
         }
@@ -732,7 +784,7 @@ function ReaderPane(api: ExtensionApi) {
       return () => {
         container.removeEventListener("click", handleClick);
       };
-    }, [html, linkIndex, document]);
+    }, [html, linkIndex, document, outlineCache, outlineNav]);
 
     // Element identity as memo boundary: react-dom rewrites
     // dangerouslySetInnerHTML on every commit even when the html string is

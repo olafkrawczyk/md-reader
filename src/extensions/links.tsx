@@ -11,7 +11,11 @@ import type { FileEntry } from "../core/workspace/types";
 import { tabs } from "../core/tabs/tabStore";
 import { BacklinksIcon } from "../core/ui/icons";
 import { QuietButton } from "../core/ui/controls";
-import type { MarkdownPayload } from "./markdownContract";
+import type { MarkdownPayload, DocumentHeading, MdOutlineCache } from "./markdownContract";
+import { slugify } from "./markdownContract";
+import { outlineNavigationKey } from "./outline";
+import type { OutlineNavigationService } from "./outline";
+import { workspace } from "../core/workspace/workspace";
 import { readTextFile } from "../core/workspace/bridge";
 
 export interface BacklinkItem {
@@ -37,6 +41,7 @@ export interface LinkIndexService {
   removeFile(path: string): void;
   retargetFile(from: string, to: string): void;
   reindexAll(): Promise<void>;
+  reindexPaths(paths: readonly string[]): Promise<void>;
 }
 
 export const linkIndexKey = serviceKey<LinkIndexService>("mdr.links.index");
@@ -56,6 +61,80 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const WIKILINK_REGEX = /\[\[([^\]|\n]+?)(?:\|([^\]|\n]+?))?\]\]/g;
+
+/**
+ * Splits `Note#Heading` / `Note#L42` into the file part and its fragment.
+ * The fragment addresses a place inside the document; everything that
+ * resolves a target to a file works on the file part alone.
+ */
+export function splitTarget(target: string): { file: string; fragment: string } {
+  const hash = target.indexOf("#");
+  if (hash === -1) {
+    return { file: target, fragment: "" };
+  }
+  return { file: target.slice(0, hash).trim(), fragment: target.slice(hash + 1).trim() };
+}
+
+/**
+ * Where a link fragment points inside the target document: `#L42` is an
+ * explicit line, anything else is a heading matched against the document's
+ * outline by slug (the same slugs the reader stamps as element ids). Null
+ * when there is no fragment or the heading does not exist — a bad anchor
+ * still opens the document, at the top, rather than failing the click.
+ */
+export function resolveFragment(
+  fragment: string,
+  headings: readonly DocumentHeading[],
+): { id: string; line: number } | null {
+  if (fragment === "") {
+    return null;
+  }
+  const explicitLine = /^L(\d+)$/i.exec(fragment);
+  if (explicitLine?.[1] !== undefined) {
+    return { id: "", line: Math.max(1, Number(explicitLine[1])) };
+  }
+  const slug = slugify(fragment);
+  const heading =
+    headings.find((candidate) => candidate.id === slug) ??
+    headings.find((candidate) => candidate.title.toLowerCase() === fragment.toLowerCase());
+  return heading === undefined ? null : { id: heading.id, line: heading.line };
+}
+
+/**
+ * Opens a document and scrolls to the place its link fragment names. The tab
+ * is opened first so the document is loaded and routed; the jump is then
+ * published through the outline navigation service, which parks it until a
+ * pane showing that document can perform it. An empty or unresolvable
+ * fragment opens the document normally, at the top.
+ */
+export async function openAtFragment(
+  path: string,
+  fragment: string,
+  outlineCache: MdOutlineCache | null,
+  outlineNav: OutlineNavigationService | null,
+): Promise<void> {
+  await tabs.open(path);
+  if (fragment === "" || outlineNav === null) {
+    return;
+  }
+  const document = workspace.documents.find((candidate) => candidate.path === path);
+  const headings =
+    document !== undefined && outlineCache !== null ? outlineCache.get(document) : [];
+  const place = resolveFragment(fragment, headings);
+  if (place !== null) {
+    outlineNav.jumpToHeading(place.id, place.line, path);
+  }
+}
+
+/** Opens a document and scrolls to one of its source lines. */
+export async function openAtLine(
+  path: string,
+  line: number,
+  outlineNav: OutlineNavigationService | null,
+): Promise<void> {
+  await tabs.open(path);
+  outlineNav?.jumpToHeading(`line:${line}`, line, path);
+}
 
 function transformWikilinksInAst(node: unknown): void {
   if (!isRecord(node)) {
@@ -216,6 +295,11 @@ export class LinkIndexServiceImpl implements LinkIndexService {
   // replace linear scans that ran once per link per backlink query.
   #byCandidate = new Map<string, string>();
   #byStem = new Map<string, string[]>();
+  // Lowercased filename -> occurrence count across the whole tree, cached
+  // against tree identity like #mdFiles: getBacklinks runs per render and the
+  // walk it feeds dominated the file-open path.
+  #nameCountsTree: readonly FileEntry[] | null = null;
+  #nameCounts = new Map<string, number>();
 
   constructor(api: ExtensionApi) {
     this.#api = api;
@@ -260,7 +344,9 @@ export class LinkIndexServiceImpl implements LinkIndexService {
   }
 
   resolveTarget(target: string, fromPath?: string): string | null {
-    const normalizedTarget = target.trim().replace(/\\/g, "/");
+    // A `#fragment` addresses a place inside the file; resolution is about
+    // which file, so it is dropped here and applied by the navigator.
+    const normalizedTarget = splitTarget(target).file.trim().replace(/\\/g, "/");
     if (!normalizedTarget) return null;
 
     const mdFiles = this.#markdownFiles();
@@ -340,13 +426,18 @@ export class LinkIndexServiceImpl implements LinkIndexService {
     }
 
     // Count workspace filenames so colliding names (A/notes.md vs B/notes.md)
-    // can be shown with their directory to stay distinguishable.
-    const allFiles = collectAllFiles(this.#api.workspace.tree);
-    const nameCounts = new Map<string, number>();
-    for (const file of allFiles) {
-      const name = fileNameOf(file).toLowerCase();
-      nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+    // can be shown with their directory to stay distinguishable. Cached
+    // against tree identity like #markdownFiles.
+    const tree = this.#api.workspace.tree;
+    if (tree !== this.#nameCountsTree) {
+      this.#nameCountsTree = tree;
+      this.#nameCounts = new Map();
+      for (const file of collectAllFiles(tree)) {
+        const name = fileNameOf(file).toLowerCase();
+        this.#nameCounts.set(name, (this.#nameCounts.get(name) ?? 0) + 1);
+      }
     }
+    const nameCounts = this.#nameCounts;
 
     const root = this.#api.workspace.root;
     const rootNorm = root ? normalizePath(root) : "";
@@ -455,13 +546,45 @@ export class LinkIndexServiceImpl implements LinkIndexService {
 
   async reindexAll(): Promise<void> {
     const mdFiles = this.#markdownFiles();
+    const currentFiles = new Set(mdFiles);
 
+    // Drop removed files from the link index.
+    for (const path of this.#fileLinks.keys()) {
+      if (!currentFiles.has(path)) {
+        this.#fileLinks.delete(path);
+      }
+    }
+
+    // Incremental: only read files not already indexed.
+    const missing = mdFiles.filter((path) => !this.#fileLinks.has(path));
     await Promise.all(
-      mdFiles.map(async (path) => {
+      missing.map(async (path) => {
         try {
           const content = await readTextFile(path);
           const links = parseLinksFromText(content);
           this.#fileLinks.set(path, links);
+        } catch {
+          // Skip unreadable files
+        }
+      }),
+    );
+    this.#notify();
+  }
+
+  /** Re-reads externally modified files that are not already held open in memory. */
+  async reindexPaths(paths: readonly string[]): Promise<void> {
+    const openPaths = new Set(this.#api.workspace.documents.map((d) => d.path));
+    const mdPaths = paths.filter(
+      (p) => (p.endsWith(".md") || p.endsWith(".markdown")) && !openPaths.has(p),
+    );
+    if (mdPaths.length === 0) {
+      return;
+    }
+    await Promise.all(
+      mdPaths.map(async (path) => {
+        try {
+          const content = await readTextFile(path);
+          this.#fileLinks.set(path, parseLinksFromText(content));
         } catch {
           // Skip unreadable files
         }
@@ -528,6 +651,7 @@ function BacklinksPane(api: ExtensionApi) {
     const activeDocFromRouter = useStoreValue(api.router.activeSource);
     const activeDoc = routedDoc ?? activeDocFromRouter;
     const linkIndex = useService(api.services, linkIndexKey);
+    const outlineNav = useService(api.services, outlineNavigationKey);
 
     const backlinks = useStoreValue(
       useMemo(() => {
@@ -540,11 +664,11 @@ function BacklinksPane(api: ExtensionApi) {
 
     const handleJump = useCallback(
       (item: BacklinkItem) => {
-        tabs.open(item.sourcePath).catch((err: unknown) => {
+        openAtLine(item.sourcePath, item.line, outlineNav).catch((err: unknown) => {
           console.error("failed to open backlink source", item.sourcePath, err);
         });
       },
-      [],
+      [outlineNav],
     );
 
     if (!activeDoc) {
@@ -590,6 +714,7 @@ function BacklinksToolbarControl(api: ExtensionApi) {
     const [open, setOpen] = useState(false);
     const activeDoc = useStoreValue(api.router.activeSource);
     const linkIndex = useService(api.services, linkIndexKey);
+    const outlineNav = useService(api.services, outlineNavigationKey);
     const wrapperRef = useRef<HTMLDivElement | null>(null);
 
     const backlinks = useStoreValue(
@@ -607,12 +732,12 @@ function BacklinksToolbarControl(api: ExtensionApi) {
 
     const handleJump = useCallback(
       (item: BacklinkItem) => {
-        tabs.open(item.sourcePath).catch((err: unknown) => {
+        openAtLine(item.sourcePath, item.line, outlineNav).catch((err: unknown) => {
           console.error("failed to open backlink source", item.sourcePath, err);
         });
         setOpen(false);
       },
-      [],
+      [outlineNav],
     );
 
     useEffect(() => {
@@ -727,6 +852,12 @@ function activate(api: ExtensionApi): void {
   api.workspace.onTreeChanged(() => {
     linkIndex.reindexAll().catch((err: unknown) => {
       console.error("failed to reindex workspace links", err);
+    });
+  });
+
+  api.workspace.onPathsModified((paths) => {
+    linkIndex.reindexPaths(paths).catch((err: unknown) => {
+      console.error("failed to reindex modified paths", err);
     });
   });
 

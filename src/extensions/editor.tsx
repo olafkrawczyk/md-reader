@@ -15,7 +15,7 @@ import { searchTargetRegistryKey } from "../core/search/searchTypes";
 import type { SearchTarget } from "../core/search/searchTypes";
 import type { Document } from "../core/workspace/document";
 import { mdOutlineCacheKey } from "./markdownContract";
-import { outlineNavigationKey } from "./outline";
+import { outlineNavigationKey, usePendingJump } from "./outline";
 import type { OutlineJumpTarget } from "./outline";
 import { createWikilinkCompletion } from "./links";
 import { linkIndexKey } from "./links";
@@ -354,10 +354,10 @@ function EditorPane(api: ExtensionApi) {
         return;
       }
       const jumpTarget: OutlineJumpTarget = {
-        scrollToHeading(_id: string, line: number) {
+        scrollToHeading(_id: string, line: number): boolean {
           const view = getView();
           if (view === null) {
-            return;
+            return false;
           }
           const lineInfo = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
           view.dispatch({
@@ -365,10 +365,13 @@ function EditorPane(api: ExtensionApi) {
             effects: EditorView.scrollIntoView(lineInfo.from, { y: "start", yMargin: 0 }),
           });
           view.focus();
+          return true;
         },
       };
       return outlineNav.registerJumpTarget(jumpTarget);
     }, [outlineNav, getView]);
+
+    usePendingJump(outlineNav, document, document?.text);
 
     // Outline scroll tracking (editor)
     useEffect(() => {
