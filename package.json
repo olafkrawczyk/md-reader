@@ -22,7 +22,8 @@
     "test:search": "node tests/workspace-search.mjs",
     "test:editor": "node tests/editor-experience.mjs",
     "test:highlighting": "node tests/code-highlighting.mjs",
-    "test:cache": "node tests/highlight-cache.mjs"
+    "test:cache": "node tests/highlight-cache.mjs",
+    "test:webkit": "node tests/webkit-apis.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

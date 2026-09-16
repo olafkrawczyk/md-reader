@@ -173,20 +173,6 @@ function joinPath(base: string, rel: string): string {
   return normalizePath(`${base}/${rel}`);
 }
 
-function matchesCandidate(filePath: string, candidatePath: string): boolean {
-  const normFile = normalizePath(filePath);
-  const normCandidate = normalizePath(candidatePath);
-  if (normFile === normCandidate || normFile.toLowerCase() === normCandidate.toLowerCase()) {
-    return true;
-  }
-  const fileLower = normFile.toLowerCase();
-  const candLower = normCandidate.toLowerCase();
-  return (
-    fileLower === `${candLower}.md` ||
-    fileLower === `${candLower}.markdown`
-  );
-}
-
 function fileNameOf(path: string): string {
   return path.split("/").pop() ?? path;
 }
@@ -218,17 +204,66 @@ export class LinkIndexServiceImpl implements LinkIndexService {
   // through the store sources, so snapshots must be referentially stable
   // between index mutations.
   readonly #backlinksCache = new Map<string, readonly BacklinkItem[]>();
+  // The workspace tree is walked by every resolveTarget call, and
+  // getBacklinks makes one per link in the workspace — an O(files x links)
+  // re-walk that dominated opening a file. The derived file list is cached
+  // against the tree identity instead; the workspace replaces the array on
+  // every rescan, so identity is an exact staleness check.
+  #fileListTree: readonly FileEntry[] | null = null;
+  #mdFiles: readonly string[] = [];
+  // Candidate path (lowercased, with and without extension) -> first file
+  // matching it, and lowercased stem -> every file with that stem. Both
+  // replace linear scans that ran once per link per backlink query.
+  #byCandidate = new Map<string, string>();
+  #byStem = new Map<string, string[]>();
 
   constructor(api: ExtensionApi) {
     this.#api = api;
+  }
+
+  /** Markdown files in the workspace, recomputed only when the tree changes. */
+  #markdownFiles(): readonly string[] {
+    const tree = this.#api.workspace.tree;
+    if (tree !== this.#fileListTree) {
+      this.#fileListTree = tree;
+      this.#mdFiles = collectAllFiles(tree).filter(
+        (p) => p.endsWith(".md") || p.endsWith(".markdown"),
+      );
+      this.#byCandidate = new Map();
+      this.#byStem = new Map();
+      for (const file of this.#mdFiles) {
+        const norm = normalizePath(file).toLowerCase();
+        // matchesCandidate accepts the path as written and the path with the
+        // markdown extension stripped; both are keys onto the same file.
+        // First file wins, matching the previous `find` semantics.
+        for (const key of [norm, norm.replace(/\.(md|markdown)$/, "")]) {
+          if (!this.#byCandidate.has(key)) {
+            this.#byCandidate.set(key, file);
+          }
+        }
+        const stem = stemOf(file).toLowerCase();
+        const bucket = this.#byStem.get(stem);
+        if (bucket === undefined) {
+          this.#byStem.set(stem, [file]);
+        } else {
+          bucket.push(file);
+        }
+      }
+    }
+    return this.#mdFiles;
+  }
+
+  /** The file a candidate path names, or null. Replaces a linear scan. */
+  #lookupCandidate(candidate: string): string | null {
+    this.#markdownFiles();
+    return this.#byCandidate.get(normalizePath(candidate).toLowerCase()) ?? null;
   }
 
   resolveTarget(target: string, fromPath?: string): string | null {
     const normalizedTarget = target.trim().replace(/\\/g, "/");
     if (!normalizedTarget) return null;
 
-    const allFiles = collectAllFiles(this.#api.workspace.tree);
-    const mdFiles = allFiles.filter((p) => p.endsWith(".md") || p.endsWith(".markdown"));
+    const mdFiles = this.#markdownFiles();
 
     const hasSlash = normalizedTarget.includes("/");
     const sourceDir = fromPath ? dirname(fromPath) : undefined;
@@ -237,19 +272,13 @@ export class LinkIndexServiceImpl implements LinkIndexService {
     if (sourceDir !== undefined) {
       if (!hasSlash) {
         // Bare target: check if sibling exists in source directory
-        const siblingCandidate = joinPath(sourceDir, normalizedTarget);
-        const sibling = mdFiles.find((file) => matchesCandidate(file, siblingCandidate));
+        const sibling = this.#lookupCandidate(joinPath(sourceDir, normalizedTarget));
         if (sibling) {
           return sibling;
         }
       } else if (normalizedTarget.startsWith("./") || normalizedTarget.startsWith("../")) {
         // Explicit relative path with ./ or ../
-        const relCandidate = joinPath(sourceDir, normalizedTarget);
-        const relMatch = mdFiles.find((file) => matchesCandidate(file, relCandidate));
-        if (relMatch) {
-          return relMatch;
-        }
-        return null;
+        return this.#lookupCandidate(joinPath(sourceDir, normalizedTarget));
       }
     } else if (normalizedTarget.startsWith("./") || normalizedTarget.startsWith("../")) {
       return null;
@@ -259,8 +288,7 @@ export class LinkIndexServiceImpl implements LinkIndexService {
     if (hasSlash) {
       // 2a. Check relative to source directory (if sourceDir exists and target doesn't start with /)
       if (sourceDir !== undefined && !normalizedTarget.startsWith("/")) {
-        const relCandidate = joinPath(sourceDir, normalizedTarget);
-        const relMatch = mdFiles.find((file) => matchesCandidate(file, relCandidate));
+        const relMatch = this.#lookupCandidate(joinPath(sourceDir, normalizedTarget));
         if (relMatch) {
           return relMatch;
         }
@@ -270,8 +298,7 @@ export class LinkIndexServiceImpl implements LinkIndexService {
       const root = this.#api.workspace.root;
       const cleanTarget = normalizedTarget.startsWith("/") ? normalizedTarget.slice(1) : normalizedTarget;
       if (root) {
-        const rootCandidate = joinPath(root, cleanTarget);
-        const rootMatch = mdFiles.find((file) => matchesCandidate(file, rootCandidate));
+        const rootMatch = this.#lookupCandidate(joinPath(root, cleanTarget));
         if (rootMatch) {
           return rootMatch;
         }
@@ -297,8 +324,7 @@ export class LinkIndexServiceImpl implements LinkIndexService {
     }
 
     // 3. Unique global stem match (bare target without slashes)
-    const targetStem = stemOf(normalizedTarget).toLowerCase();
-    const matches = mdFiles.filter((file) => stemOf(file).toLowerCase() === targetStem);
+    const matches = this.#byStem.get(stemOf(normalizedTarget).toLowerCase()) ?? [];
     if (matches.length === 1) {
       return matches[0] ?? null;
     }
@@ -373,8 +399,7 @@ export class LinkIndexServiceImpl implements LinkIndexService {
   }
 
   getTargetCompletions(): readonly TargetCompletion[] {
-    const allFiles = collectAllFiles(this.#api.workspace.tree);
-    const mdFiles = allFiles.filter((p) => p.endsWith(".md") || p.endsWith(".markdown"));
+    const mdFiles = this.#markdownFiles();
     const root = this.#api.workspace.root;
     const rootNorm = root ? normalizePath(root) : "";
 
@@ -429,8 +454,7 @@ export class LinkIndexServiceImpl implements LinkIndexService {
   }
 
   async reindexAll(): Promise<void> {
-    const allFiles = collectAllFiles(this.#api.workspace.tree);
-    const mdFiles = allFiles.filter((p) => p.endsWith(".md") || p.endsWith(".markdown"));
+    const mdFiles = this.#markdownFiles();
 
     await Promise.all(
       mdFiles.map(async (path) => {

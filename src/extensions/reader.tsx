@@ -166,6 +166,27 @@ function useSettingBoolean(api: ExtensionApi, key: string, fallback: boolean): b
 // API, so the memoized reader HTML never mutates. Re-renders re-apply the
 // standing query via a MutationObserver.
 
+// Safari/WebKit — the Tauri webview on macOS — ships no requestIdleCallback,
+// so calling it throws a ReferenceError and unmounts the reader. A timeout
+// slice with a synthetic deadline keeps the same "yield between blocks"
+// behavior; it just cannot see real idle time.
+// ponytail: fixed 8ms budget rather than a scheduler. Upgrade to
+// scheduler.postTask (WebKit 26.4+) once the minimum webview allows it.
+const idleStart: (step: (deadline: IdleDeadline) => void) => number =
+  typeof requestIdleCallback === "function"
+    ? (step) => requestIdleCallback(step, { timeout: 500 })
+    : (step) =>
+        window.setTimeout(() => {
+          const began = performance.now();
+          step({
+            didTimeout: false,
+            timeRemaining: () => Math.max(0, 8 - (performance.now() - began)),
+          });
+        }, 1);
+
+const idleCancel: (handle: number) => void =
+  typeof cancelIdleCallback === "function" ? cancelIdleCallback : clearTimeout;
+
 const MATCHES_HIGHLIGHT = "mdr-find-matches";
 const CURRENT_HIGHLIGHT = "mdr-find-current";
 
@@ -408,14 +429,14 @@ function ReaderPane(api: ExtensionApi) {
           }
         }
         if (pending.length > 0 && !cancelled) {
-          handle = requestIdleCallback(step, { timeout: 500 });
+          handle = idleStart(step);
         }
       };
 
-      let handle = requestIdleCallback(step, { timeout: 500 });
+      let handle = idleStart(step);
       return () => {
         cancelled = true;
-        cancelIdleCallback(handle);
+        idleCancel(handle);
       };
     }, [html, highlightCode]);
 

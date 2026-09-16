@@ -131,7 +131,9 @@ async function openDocument(page, name, folder) {
   await page.locator(".mdr-reader").waitFor();
 }
 
-const SEARCH_ICON = '[aria-label="Search file names"]';
+// Both resolve to the persistent filter input in the explorer action bar.
+const SEARCH_FIELD = '[aria-label="Search file names"]';
+const CLEAR_BUTTON = '[aria-label="Clear search"]';
 const SEARCH_INPUT = ".mdr-explorer-search";
 const FIND_INPUT = ".mdr-findbar-input";
 
@@ -305,16 +307,15 @@ check("split view: focus outside document panes falls back to the reader", async
 
 // ---- sidebar filename search (task 8.2) ----
 
-check("sidebar search unfolds, filters across subdirs, restores", async (page) => {
-  const sidebarVisible = await page.locator(SEARCH_ICON).isVisible();
+check("sidebar filter field is always visible, filters across subdirs, restores", async (page) => {
+  const sidebarVisible = await page.locator(SEARCH_FIELD).isVisible();
   if (!sidebarVisible) {
     await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   }
-  await page.locator(SEARCH_ICON).click();
-  assert(
-    await page.evaluate(() => document.activeElement?.classList.contains("mdr-explorer-search")),
-    "search input should be focused immediately after unfolding",
-  );
+  // The action bar's filter field is persistent (explorer-action-bar task
+  // 2.4 removed the magnifier toggle and its open/closed state), so it needs
+  // no click to reveal — only focus before typing.
+  await page.locator(SEARCH_INPUT).click();
   await page.keyboard.type("old");
   await page.locator(".mdr-explorer-row", { hasText: "notes-old.md" }).waitFor();
   assert(
@@ -326,7 +327,14 @@ check("sidebar search unfolds, filters across subdirs, restores", async (page) =
     "matches inside collapsed folders should be visible",
   );
   await page.keyboard.press("Escape");
-  assert(await page.locator(SEARCH_INPUT).count() === 0, "input should collapse back to the icon");
+  assert(
+    await page.locator(SEARCH_INPUT).inputValue() === "",
+    "Escape should clear the query",
+  );
+  assert(
+    await page.locator(SEARCH_INPUT).isVisible(),
+    "the filter field stays visible after Escape — it is not a toggle",
+  );
   // The sidebar was re-toggled this session, so folder disclosure restarted:
   // expand docs, then the pruned file must be gone and the full tree back.
   await page.locator(".mdr-explorer-row", { hasText: "docs" }).click();
@@ -337,8 +345,35 @@ check("sidebar search unfolds, filters across subdirs, restores", async (page) =
   );
 });
 
+// Spec "Clear a filter from the field" has two halves; Escape is covered
+// above, the ⓧ affordance here.
+check("filter clear affordance appears with text and restores the tree", async (page) => {
+  await page.locator(SEARCH_FIELD).click();
+  assert(
+    await page.locator(CLEAR_BUTTON).count() === 0,
+    "clear affordance should be absent while the field is empty",
+  );
+  await page.keyboard.type("old");
+  await page.locator(".mdr-explorer-row", { hasText: "notes-old.md" }).waitFor();
+  await page.locator(CLEAR_BUTTON).click();
+  assert(
+    await page.locator(SEARCH_FIELD).inputValue() === "",
+    "clicking the clear affordance should empty the query",
+  );
+  assert(
+    await page.evaluate(() =>
+      document.activeElement?.classList.contains("mdr-explorer-search"),
+    ),
+    "clearing should refocus the field for the next query",
+  );
+  assert(
+    await page.locator(CLEAR_BUTTON).count() === 0,
+    "clear affordance should disappear once the field is empty",
+  );
+});
+
 check("sidebar search matches nested files case-insensitively", async (page) => {
-  await page.locator(SEARCH_ICON).click();
+  await page.locator(SEARCH_INPUT).click();
   await page.keyboard.type("NOTE");
   await page.waitForFunction(() => {
     const rows = [

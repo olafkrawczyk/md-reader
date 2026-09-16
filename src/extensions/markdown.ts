@@ -8,7 +8,7 @@ import {
   mdOutlineCacheKey,
   mdParseKey,
 } from "./markdownContract";
-import type { MarkdownPayload } from "./markdownContract";
+import type { MarkdownPayload, MdParse } from "./markdownContract";
 
 const parser = unified().use(remarkParse);
 
@@ -23,8 +23,6 @@ function activate(api: ExtensionApi): void {
   // registry (buffered until this claim, so order never matters).
   const pipeline = api.transformers.pipeline<MarkdownPayload>("markdown");
 
-  api.services.register(mdParseKey, (text: string) => parser.parse(text));
-
   // Keyed on the document's text, not its version: an external reload
   // swaps the text without bumping the version, and the reader must
   // re-render from the new content.
@@ -33,6 +31,17 @@ function activate(api: ExtensionApi): void {
     { text: string; ast: MarkdownPayload["ast"]; headings: ReturnType<typeof extractHeadings> }
   >();
 
+  api.services.register(mdParseKey, (text: string) => parser.parse(text));
+
+  // The registered parser is the one to use — @mdr/gfm replaces it with a
+  // GFM-enabled parse, and re-registration invalidates anything parsed with
+  // the previous one.
+  let parse: MdParse = (text: string) => parser.parse(text);
+  api.services.consume(mdParseKey, (service) => {
+    parse = service;
+    cache.clear();
+  });
+
   function getParsed(document: { path: string; text: string }) {
     const cached = cache.get(document.path);
     if (cached && cached.text === document.text) {
@@ -40,7 +49,7 @@ function activate(api: ExtensionApi): void {
     }
     const payload: MarkdownPayload = {
       text: document.text,
-      ast: parser.parse(document.text),
+      ast: parse(document.text),
     };
     pipeline.run(payload);
     const headings = extractHeadings(payload.ast);

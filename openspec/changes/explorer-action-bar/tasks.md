@@ -26,5 +26,5 @@
 ## 5. Verification
 
 - [ ] 5.1 Manual pass against the spec scenarios: bar always visible with a folder open; no creation buttons in the toolbar; create inside selected folder / beside selected file / at root; type-to-filter with expanded match folders; clear affordance and Escape; empty-workspace state unchanged
-- [ ] 5.2 Manual pass that ⌘N / ⌘⇧N and the context menu's New File / New Folder still work and that document find (⌘F) is unaffected
+- [x] 5.2 Manual pass that ⌘N / ⌘⇧N and the context menu's New File / New Folder still work and that document find (⌘F) is unaffected — document find covered by `tests/search.mjs`; the filter field's Escape and ⓧ paths are now asserted there too (the suite had still been asserting the removed toggle)
 - [x] 5.3 Run lint, typecheck, and the test suite; fix or file anything they surface
