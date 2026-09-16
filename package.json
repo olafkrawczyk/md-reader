@@ -20,7 +20,9 @@
     "test:outline": "node tests/document-outline.mjs",
     "test:wikilinks": "node tests/bidirectional-links.mjs",
     "test:search": "node tests/workspace-search.mjs",
-    "test:editor": "node tests/editor-experience.mjs"
+    "test:editor": "node tests/editor-experience.mjs",
+    "test:highlighting": "node tests/code-highlighting.mjs",
+    "test:cache": "node tests/highlight-cache.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

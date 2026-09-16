@@ -32,6 +32,14 @@ export interface MdOutlineCache {
   get(document: Document): readonly DocumentHeading[];
 }
 
+/**
+ * Highlights one code block, returning shiki's `<pre>` markup — or null when
+ * the block should keep its plain rendering (no language, unknown language).
+ */
+export type HighlightCode = (code: string, lang: string) => string | null;
+
+export const highlightCodeKey = serviceKey<HighlightCode>("md:highlight-code");
+
 export const mdParseKey = serviceKey<MdParse>("md:parse");
 export const mdAstCacheKey = serviceKey<MdAstCache>("md:ast-cache");
 export const mdOutlineCacheKey = serviceKey<MdOutlineCache>("md:outline-cache");

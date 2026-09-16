@@ -5,7 +5,7 @@ import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
 import { usePaneHost } from "../core/extension";
-import { mdAstCacheKey } from "./markdownContract";
+import { highlightCodeKey, mdAstCacheKey } from "./markdownContract";
 import { swapTaskMarker } from "./taskTicks";
 import { useService, useStoreValue } from "../core/state/storeHooks";
 import type { Document } from "../core/workspace/document";
@@ -354,6 +354,7 @@ function ReaderPane(api: ExtensionApi) {
     const registry = useService(api.services, searchTargetRegistryKey);
     const outlineNav = useService(api.services, outlineNavigationKey);
     const linkIndex = useService(api.services, linkIndexKey);
+    const highlightCode = useService(api.services, highlightCodeKey);
     const bionicReading = useSettingBoolean(api, "bionicReading", false);
     const focusMode = useSettingBoolean(api, "focusMode", false);
 
@@ -367,6 +368,56 @@ function ReaderPane(api: ExtensionApi) {
       }
       return renderer.stringify(hast);
     }, [document, astCache, text, bionicReading]);
+
+    // Highlighting runs after the plain markup has painted: it costs ~8.5ms
+    // per KB of code, which on a code-heavy document is seconds of blocked
+    // main thread if done inside the render above. Blocks are highlighted one
+    // idle slice at a time so scrolling and typing stay responsive, and the
+    // pass abandons itself if the document changes mid-flight.
+    useEffect(() => {
+      const container = containerRef.current;
+      if (container === null || html === null || highlightCode === null) {
+        return;
+      }
+      const pending = Array.from(
+        container.querySelectorAll<HTMLElement>("pre > code[class*='language-']"),
+      ).filter((code) => code.closest("pre")?.classList.contains("shiki") !== true);
+      if (pending.length === 0) {
+        return;
+      }
+
+      let cancelled = false;
+      const template = window.document.createElement("template");
+
+      const step = (deadline: IdleDeadline): void => {
+        while (pending.length > 0 && (deadline.timeRemaining() > 4 || deadline.didTimeout)) {
+          const code = pending.shift();
+          const pre = code?.closest("pre");
+          if (code === undefined || !pre) {
+            continue;
+          }
+          const lang = /language-(\S+)/.exec(code.className)?.[1] ?? "";
+          const markup = highlightCode(code.textContent ?? "", lang);
+          if (markup === null) {
+            continue;
+          }
+          template.innerHTML = markup;
+          const replacement = template.content.firstElementChild;
+          if (replacement !== null) {
+            pre.replaceWith(replacement);
+          }
+        }
+        if (pending.length > 0 && !cancelled) {
+          handle = requestIdleCallback(step, { timeout: 500 });
+        }
+      };
+
+      let handle = requestIdleCallback(step, { timeout: 500 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(handle);
+      };
+    }, [html, highlightCode]);
 
     // One search target per reader container, created lazily when the find
     // bar resolves against this pane; destroyed with the registration.

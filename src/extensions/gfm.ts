@@ -7,8 +7,8 @@ import type { MarkdownPayload } from "./markdownContract";
 const gfmParser = unified().use(remarkParse).use(remarkGfm);
 
 function activate(api: ExtensionApi): void {
-  // Priority 0: must run before @mdr/shiki (10), which rewrites code block
-  // nodes in place — a later re-parse would discard that work.
+  // Priority 0: re-parses the text, so it must run before any transformer
+  // that mutates AST nodes — a later re-parse would discard that work.
   api.transformers.attach("markdown", {
     id: "@mdr/gfm",
     priority: 0,
