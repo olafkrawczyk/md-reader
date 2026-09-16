@@ -266,7 +266,7 @@ check("find bar does not open without a document", async (page) => {
 
 check("split view: find targets the focused editor pane", async (page) => {
   await openDocument(page, "note.md"); // docs folder is still expanded
-  await page.getByRole("radiogroup", { name: "Layout" }).getByRole("radio", { name: "Split" }).click();
+  await page.keyboard.press("Alt+Meta+e");
   await page.locator(".mdr-editor .cm-content").waitFor();
   await page.locator(".mdr-editor .cm-content").click();
   await page.keyboard.press("Control+f");

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { JSX, RefObject } from "react";
 import { EditorState, RangeSetBuilder, StateEffect, StateField, Transaction } from "@codemirror/state";
-import { EditorView, keymap, Decoration, ViewPlugin } from "@codemirror/view";
+import { EditorView, keymap, drawSelection, dropCursor, Decoration, ViewPlugin } from "@codemirror/view";
 import type { DecorationSet, ViewUpdate } from "@codemirror/view";
 import { SearchQuery } from "@codemirror/search";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { syntaxHighlighting, HighlightStyle, indentUnit } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { markdown } from "@codemirror/lang-markdown";
 import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
@@ -14,6 +14,11 @@ import { useService } from "../core/state/storeHooks";
 import { searchTargetRegistryKey } from "../core/search/searchTypes";
 import type { SearchTarget } from "../core/search/searchTypes";
 import type { Document } from "../core/workspace/document";
+import { mdOutlineCacheKey } from "./markdownContract";
+import { outlineNavigationKey } from "./outline";
+import type { OutlineJumpTarget } from "./outline";
+import { createWikilinkCompletion } from "./links";
+import { linkIndexKey } from "./links";
 
 // Syntax colors ride --mdr-syntax-* variables, so a dark-appearance switch
 // restyles highlighting live without re-creating the editor.
@@ -221,6 +226,7 @@ class EditorSearchTarget implements SearchTarget {
 function useCodeMirror(
   document: Document | null,
   onContentChanged: () => void,
+  getLinkIndex: () => import("./links").LinkIndexService | null,
 ): {
   readonly hostRef: RefObject<HTMLDivElement | null>;
   readonly getView: () => EditorView | null;
@@ -228,6 +234,7 @@ function useCodeMirror(
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const changedHandlerRef = useRef(onContentChanged);
+  const linkIndexRef = useRef(getLinkIndex);
   // Last text this view accounted for: its own edits and applied external
   // changes update it before the document notifies, so a mismatch in the
   // subscription unambiguously means "changed elsewhere".
@@ -235,6 +242,7 @@ function useCodeMirror(
 
   useEffect(() => {
     changedHandlerRef.current = onContentChanged;
+    linkIndexRef.current = getLinkIndex;
   });
 
   useEffect(() => {
@@ -250,13 +258,17 @@ function useCodeMirror(
       state: EditorState.create({
         doc: document.text,
         extensions: [
+          drawSelection(),
+          dropCursor(),
+          indentUnit.of("  "),
           markdown(),
           history(),
           EditorView.lineWrapping,
           syntaxHighlighting(mdrHighlightStyle),
           findQueryField,
           findHighlighter,
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          createWikilinkCompletion(() => linkIndexRef.current()),
+          keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               const next = update.state.doc.toString();
@@ -301,10 +313,18 @@ function EditorPane(api: ExtensionApi) {
   return function EditorPane(): JSX.Element {
     const { document } = usePaneHost();
     const targetRef = useRef<EditorSearchTarget | null>(null);
-    const { hostRef, getView } = useCodeMirror(document, () => {
-      targetRef.current?.refresh();
-    });
+    const linkIndex = useService(api.services, linkIndexKey);
+    const getLinkIndex = useCallback(() => linkIndex, [linkIndex]);
+    const { hostRef, getView } = useCodeMirror(
+      document,
+      () => {
+        targetRef.current?.refresh();
+      },
+      getLinkIndex,
+    );
     const registry = useService(api.services, searchTargetRegistryKey);
+    const outlineNav = useService(api.services, outlineNavigationKey);
+    const outlineCache = useService(api.services, mdOutlineCacheKey);
 
     // One search target per editor view, created lazily when the find bar
     // resolves against this pane.
@@ -327,6 +347,69 @@ function EditorPane(api: ExtensionApi) {
       registry.register("editor", getTarget);
       return () => registry.unregister("editor");
     }, [registry, getTarget]);
+
+    // Outline jump target registration (editor)
+    useEffect(() => {
+      if (outlineNav === null) {
+        return;
+      }
+      const jumpTarget: OutlineJumpTarget = {
+        scrollToHeading(_id: string, line: number) {
+          const view = getView();
+          if (view === null) {
+            return;
+          }
+          const lineInfo = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
+          view.dispatch({
+            selection: { anchor: lineInfo.from },
+            effects: EditorView.scrollIntoView(lineInfo.from, { y: "start", yMargin: 0 }),
+          });
+          view.focus();
+        },
+      };
+      return outlineNav.registerJumpTarget(jumpTarget);
+    }, [outlineNav, getView]);
+
+    // Outline scroll tracking (editor)
+    useEffect(() => {
+      const view = getView();
+      if (view === null || outlineNav === null || document === null || outlineCache === null) {
+        return;
+      }
+      let raf = 0;
+      const handleScroll = (): void => {
+        if (raf !== 0) {
+          return;
+        }
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          const headings = outlineCache.get(document);
+          if (headings.length === 0) {
+            return;
+          }
+          const scrollTop = view.scrollDOM.scrollTop;
+          const visibleBlock = view.lineBlockAtHeight(scrollTop);
+          const activeLine = view.state.doc.lineAt(visibleBlock.from);
+          let current: string | null = null;
+          for (const heading of headings) {
+            if (heading.line <= activeLine.number) {
+              current = heading.id;
+            } else {
+              break;
+            }
+          }
+          outlineNav.setActiveHeading(current ?? headings[0]?.id ?? null);
+        });
+      };
+      view.scrollDOM.addEventListener("scroll", handleScroll, { passive: true });
+      handleScroll();
+      return () => {
+        view.scrollDOM.removeEventListener("scroll", handleScroll);
+        if (raf !== 0) {
+          cancelAnimationFrame(raf);
+        }
+      };
+    }, [outlineNav, outlineCache, document, getView]);
 
     if (document === null) {
       return <div className="mdr-empty">No document open.</div>;

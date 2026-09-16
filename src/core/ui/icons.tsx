@@ -2,14 +2,21 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Columns2,
+  Compass,
+  Eye,
   File,
   FileCode,
   FilePlus,
   FileText,
+  Focus,
   Folder,
   FolderOpen,
   FolderPlus,
+  Link2,
+  ListTree,
   PanelLeft,
+  Pen,
   Search,
   Settings,
   X,
@@ -65,3 +72,10 @@ export const ChevronUpIcon = icon(ChevronUp, 13);
 export const ChevronDownIcon = icon(ChevronDown, 13);
 export const FilePlusIcon = icon(FilePlus, 15);
 export const FolderPlusIcon = icon(FolderPlus, 15);
+export const OutlineIcon = icon(ListTree, 15);
+export const BacklinksIcon = icon(Link2, 15);
+export const FocusIcon = icon(Focus, 15);
+export const EyeIcon = icon(Eye, 15);
+export const PenIcon = icon(Pen, 15);
+export const SplitIcon = icon(Columns2, 15);
+export const ResearchIcon = icon(Compass, 15);

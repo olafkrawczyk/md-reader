@@ -78,6 +78,18 @@ function activate(api: ExtensionApi): void {
         choices: Object.keys(measureChoices),
         defaultValue: defaultMeasure,
       },
+      {
+        key: "focusMode",
+        label: "Focus mode",
+        type: "boolean",
+        defaultValue: false,
+      },
+      {
+        key: "bionicReading",
+        label: "Bionic reading",
+        type: "boolean",
+        defaultValue: false,
+      },
     ],
   });
   api.settings.register({

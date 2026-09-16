@@ -15,6 +15,8 @@ import { searchUiKey } from "../search/searchTypes";
 import type { SearchUiController } from "../search/searchTypes";
 import { explorerUiKey } from "../explorer/explorerActions";
 import type { ExplorerUiController } from "../explorer/explorerActions";
+import { documentModeKey } from "../modes/documentModes";
+import type { DocumentModeController } from "../modes/documentModes";
 import { tabs } from "../tabs/tabStore";
 import { onCliOpen, takePendingCliOpen } from "../workspace/cliOpen";
 import type { CliOpen } from "../workspace/cliOpen";
@@ -211,6 +213,7 @@ export function useGlobalShortcuts(
 ): void {
   const searchUiRef = useRef<SearchUiController | null>(null);
   const explorerUiRef = useRef<ExplorerUiController | null>(null);
+  const modeControllerRef = useRef<DocumentModeController | null>(null);
   const statusTimer = useRef<number | null>(null);
 
   useEffect(
@@ -225,6 +228,14 @@ export function useGlobalShortcuts(
     () =>
       api.services.consume(explorerUiKey, (ui) => {
         explorerUiRef.current = ui;
+      }),
+    [api],
+  );
+
+  useEffect(
+    () =>
+      api.services.consume(documentModeKey, (mode) => {
+        modeControllerRef.current = mode;
       }),
     [api],
   );
@@ -253,6 +264,15 @@ export function useGlobalShortcuts(
           ?.save()
           .then(() => flashStatus({ text: "Saved", tone: "ok" }))
           .catch((err: unknown) => showError(dispatch, err));
+        return;
+      }
+      if (mod && (event.key === "e" || event.key === "E")) {
+        event.preventDefault();
+        if (event.altKey) {
+          modeControllerRef.current?.toggleSplit();
+        } else {
+          modeControllerRef.current?.toggleMode();
+        }
         return;
       }
       if (mod && event.key === "f") {

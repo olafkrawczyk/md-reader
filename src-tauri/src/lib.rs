@@ -113,7 +113,8 @@ pub fn run() {
             workspace::create_entry,
             workspace::rename_entry,
             workspace::copy_entry,
-            workspace::delete_entry
+            workspace::delete_entry,
+            workspace::workspace_search
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

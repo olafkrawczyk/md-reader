@@ -115,7 +115,7 @@ async function openDocument(page) {
   await page.locator(".mdr-explorer-row", { hasText: FILE }).click();
   await page.locator(".mdr-reader").waitFor();
   await page.locator(".mdr-reader", { hasText: "version one" }).waitFor();
-  await page.getByRole("radiogroup", { name: "Layout" }).getByRole("radio", { name: "Split" }).click();
+  await page.keyboard.press("Alt+Meta+e");
   await page.locator(".mdr-editor .cm-content").waitFor();
 }
 

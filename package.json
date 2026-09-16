@@ -16,9 +16,14 @@
     "test:safety": "node tests/document-safety.mjs",
     "test:ticks": "node tests/task-ticks.mjs",
     "test:naming": "node tests/file-naming.mjs",
-    "test:links": "node tests/link-handling.mjs"
+    "test:links": "node tests/link-handling.mjs",
+    "test:outline": "node tests/document-outline.mjs",
+    "test:wikilinks": "node tests/bidirectional-links.mjs",
+    "test:search": "node tests/workspace-search.mjs",
+    "test:editor": "node tests/editor-experience.mjs"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.11.0",
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.12.4",

@@ -2,7 +2,12 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import type { ExtensionApi } from "../core/extension";
 import type { ExtensionDescriptor } from "../core/extension";
-import { mdAstCacheKey, mdParseKey } from "./markdownContract";
+import {
+  extractHeadings,
+  mdAstCacheKey,
+  mdOutlineCacheKey,
+  mdParseKey,
+} from "./markdownContract";
 import type { MarkdownPayload } from "./markdownContract";
 
 const parser = unified().use(remarkParse);
@@ -23,20 +28,36 @@ function activate(api: ExtensionApi): void {
   // Keyed on the document's text, not its version: an external reload
   // swaps the text without bumping the version, and the reader must
   // re-render from the new content.
-  const cache = new Map<string, { text: string; ast: MarkdownPayload["ast"] }>();
+  const cache = new Map<
+    string,
+    { text: string; ast: MarkdownPayload["ast"]; headings: ReturnType<typeof extractHeadings> }
+  >();
+
+  function getParsed(document: { path: string; text: string }) {
+    const cached = cache.get(document.path);
+    if (cached && cached.text === document.text) {
+      return cached;
+    }
+    const payload: MarkdownPayload = {
+      text: document.text,
+      ast: parser.parse(document.text),
+    };
+    pipeline.run(payload);
+    const headings = extractHeadings(payload.ast);
+    const entry = { text: document.text, ast: payload.ast, headings };
+    cache.set(document.path, entry);
+    return entry;
+  }
+
   api.services.register(mdAstCacheKey, {
     get(document) {
-      const cached = cache.get(document.path);
-      if (cached && cached.text === document.text) {
-        return cached.ast;
-      }
-      const payload: MarkdownPayload = {
-        text: document.text,
-        ast: parser.parse(document.text),
-      };
-      pipeline.run(payload);
-      cache.set(document.path, { text: document.text, ast: payload.ast });
-      return payload.ast;
+      return getParsed(document).ast;
+    },
+  });
+
+  api.services.register(mdOutlineCacheKey, {
+    get(document) {
+      return getParsed(document).headings;
     },
   });
 }

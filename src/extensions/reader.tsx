@@ -7,11 +7,17 @@ import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
 import { usePaneHost } from "../core/extension";
 import { mdAstCacheKey } from "./markdownContract";
 import { swapTaskMarker } from "./taskTicks";
-import { useService } from "../core/state/storeHooks";
+import { useService, useStoreValue } from "../core/state/storeHooks";
 import type { Document } from "../core/workspace/document";
 import { searchTargetRegistryKey } from "../core/search/searchTypes";
 import type { MatchState, SearchTarget } from "../core/search/searchTypes";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { outlineNavigationKey } from "./outline";
+import type { OutlineJumpTarget } from "./outline";
+import { FocusIcon } from "../core/ui/icons";
+import { QuietButton } from "../core/ui/controls";
+import { linkIndexKey } from "./links";
+import { tabs } from "../core/tabs/tabStore";
 
 /**
  * Task checkboxes (design D3): remark-rehype renders them `disabled`; this
@@ -46,6 +52,77 @@ function enableTaskInputs(node: unknown, insideTaskItem: boolean): void {
   }
 }
 
+// ---- Bionic reading (task 1.7): a hast transform that splits each word's
+// leading characters into a bold `<b>` span, emphasizing the initial word
+// fixation for faster saccadic reading. Applied only to the rendered HTML —
+// the document source (and its AST) is never touched, so this never leaks
+// into edits or saves. Code blocks and existing markup elements are walked
+// but only bare text nodes are split.
+const WORD_RE = /^([\p{L}\p{N}]+)(.*)$/u;
+
+function bionicBoldLength(stemLength: number): number {
+  if (stemLength <= 3) return 1;
+  if (stemLength <= 5) return 2;
+  if (stemLength <= 8) return 3;
+  return Math.ceil(stemLength * 0.4);
+}
+
+function transformBionicText(text: string): unknown[] {
+  const parts = text.split(/(\s+)/);
+  const nodes: unknown[] = [];
+  for (const part of parts) {
+    if (part === "") {
+      continue;
+    }
+    if (/^\s+$/.test(part)) {
+      nodes.push({ type: "text", value: part });
+      continue;
+    }
+    const match = WORD_RE.exec(part);
+    if (match === null) {
+      nodes.push({ type: "text", value: part });
+      continue;
+    }
+    const stem = match[1];
+    const rest = match[2];
+    if (stem === undefined) {
+      nodes.push({ type: "text", value: part });
+      continue;
+    }
+    const boldLength = bionicBoldLength(stem.length);
+    nodes.push({
+      type: "element",
+      tagName: "b",
+      properties: { className: ["mdr-bionic"] },
+      children: [{ type: "text", value: stem.slice(0, boldLength) }],
+    });
+    const remainder = stem.slice(boldLength) + (rest ?? "");
+    if (remainder !== "") {
+      nodes.push({ type: "text", value: remainder });
+    }
+  }
+  return nodes;
+}
+
+const BIONIC_SKIP_TAGS = new Set(["pre", "code", "script", "style"]);
+
+function applyBionicReading(node: unknown, insideSkip: boolean): void {
+  if (!isRecord(node) || !Array.isArray(node.children)) {
+    return;
+  }
+  const skip = insideSkip || BIONIC_SKIP_TAGS.has(typeof node.tagName === "string" ? node.tagName : "");
+  const nextChildren: unknown[] = [];
+  for (const child of node.children) {
+    if (!skip && isRecord(child) && child.type === "text" && typeof child.value === "string") {
+      nextChildren.push(...transformBionicText(child.value));
+      continue;
+    }
+    applyBionicReading(child, skip);
+    nextChildren.push(child);
+  }
+  node.children = nextChildren;
+}
+
 const renderer = unified()
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(() => (tree: unknown) => {
@@ -65,6 +142,23 @@ function useDocumentText(document: Document | null): string | null {
     [document],
   );
   const getSnapshot = useCallback(() => document?.text ?? null, [document]);
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+/**
+ * Reactive boolean from a contributed setting namespace/key. Defaults to
+ * `fallback` until the setting resolves; re-renders on store changes.
+ */
+function useSettingBoolean(api: ExtensionApi, key: string, fallback: boolean): boolean {
+  const subscribe = useCallback(
+    (onStoreChange: () => void) =>
+      api.settingsValues.subscribe("reading", key, () => onStoreChange()),
+    [api, key],
+  );
+  const getSnapshot = useCallback(
+    () => api.settingsValues.getBoolean("reading", key, fallback),
+    [api, key, fallback],
+  );
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
@@ -258,14 +352,21 @@ function ReaderPane(api: ExtensionApi) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const targetRef = useRef<ReaderSearchTarget | null>(null);
     const registry = useService(api.services, searchTargetRegistryKey);
+    const outlineNav = useService(api.services, outlineNavigationKey);
+    const linkIndex = useService(api.services, linkIndexKey);
+    const bionicReading = useSettingBoolean(api, "bionicReading", false);
+    const focusMode = useSettingBoolean(api, "focusMode", false);
 
     const html = useMemo<string | null>(() => {
       if (document === null || astCache === null || text === null) {
         return null;
       }
       const hast = renderer.runSync(astCache.get(document));
+      if (bionicReading) {
+        applyBionicReading(hast, false);
+      }
       return renderer.stringify(hast);
-    }, [document, astCache, text]);
+    }, [document, astCache, text, bionicReading]);
 
     // One search target per reader container, created lazily when the find
     // bar resolves against this pane; destroyed with the registration.
@@ -293,6 +394,187 @@ function ReaderPane(api: ExtensionApi) {
         targetRef.current = null;
       };
     }, [registry, getTarget]);
+
+    // Outline jump target registration
+    useEffect(() => {
+      if (outlineNav === null) {
+        return;
+      }
+      const jumpTarget: OutlineJumpTarget = {
+        scrollToHeading(id: string, line: number) {
+          const container = containerRef.current;
+          if (container === null) {
+            return;
+          }
+          const escaped = id.replace(/["\\]/g, "\\$&");
+          const target =
+            container.querySelector(`[id="${escaped}"]`) ??
+            container.querySelector(`[data-line="${line}"]`);
+          if (target !== null) {
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        },
+      };
+      return outlineNav.registerJumpTarget(jumpTarget);
+    }, [outlineNav]);
+
+    // Outline scroll tracking
+    useEffect(() => {
+      const container = containerRef.current;
+      if (container === null || outlineNav === null) {
+        return;
+      }
+      const scrollParent = container.closest(".mdr-pane") ?? container;
+
+      const handleScroll = (): void => {
+        const headings = Array.from(
+          container.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6"),
+        );
+        if (headings.length === 0) {
+          return;
+        }
+        const parentRect = scrollParent.getBoundingClientRect();
+        let currentHeading: HTMLElement | null = null;
+        for (const heading of headings) {
+          const rect = heading.getBoundingClientRect();
+          if (rect.top - parentRect.top <= 100) {
+            currentHeading = heading;
+          } else {
+            break;
+          }
+        }
+        if (currentHeading === null && headings[0] !== undefined) {
+          currentHeading = headings[0];
+        }
+        if (currentHeading !== null && currentHeading.id) {
+          outlineNav.setActiveHeading(currentHeading.id);
+        }
+      };
+
+      scrollParent.addEventListener("scroll", handleScroll, { passive: true });
+      handleScroll();
+      return () => {
+        scrollParent.removeEventListener("scroll", handleScroll);
+      };
+    }, [outlineNav, html]);
+
+    // Focus/dimming mode (design D4 / tasks 1.5):
+    // Attaches an IntersectionObserver to direct block children of the reader container.
+    // Accurately highlights the active reading block:
+    // - At the top of the document (scrollTop near 0): highlights the first block (e.g. title/H1).
+    // - At the bottom of the document (scrollTop at max): highlights the final block.
+    // - Throughout the document: tracks the reading focal point smoothly.
+    // - Clicking any block immediately focuses it.
+    useEffect(() => {
+      const container = containerRef.current;
+      if (container === null) {
+        return;
+      }
+      if (!focusMode) {
+        container.removeAttribute("data-focus-mode");
+        for (const child of container.children) {
+          child.classList.remove("is-focused");
+        }
+        return;
+      }
+
+      container.setAttribute("data-focus-mode", "true");
+      const scrollParent = container.closest(".mdr-pane") ?? container;
+
+      const updateFocusedBlock = (): void => {
+        const blocks = Array.from(container.children).filter(
+          (el): el is HTMLElement => el instanceof HTMLElement,
+        );
+        if (blocks.length === 0) {
+          return;
+        }
+
+        const scrollTop = scrollParent.scrollTop;
+        const maxScroll = scrollParent.scrollHeight - scrollParent.clientHeight;
+
+        // The focal line sweeps continuously from the top of the viewport
+        // (scrollTop = 0) to the bottom (scrollTop = maxScroll), so the first
+        // and last blocks are reachable and no block is skipped between them.
+        const parentRect = scrollParent.getBoundingClientRect();
+        const scrollRatio =
+          maxScroll > 0 ? Math.min(1, Math.max(0, scrollTop / maxScroll)) : 0.5;
+        const focalRatio = 0.05 + scrollRatio * 0.9;
+        const focalY = parentRect.top + parentRect.height * focalRatio;
+
+        let closestBlock: HTMLElement | null = null;
+        let minDistance = Number.POSITIVE_INFINITY;
+        for (const block of blocks) {
+          const rect = block.getBoundingClientRect();
+          const blockCenter = (rect.top + rect.bottom) / 2;
+          const distance = Math.abs(blockCenter - focalY);
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestBlock = block;
+          }
+        }
+
+        for (const block of blocks) {
+          if (block === closestBlock) {
+            block.classList.add("is-focused");
+          } else {
+            block.classList.remove("is-focused");
+          }
+        }
+      };
+
+      const handleBlockClick = (event: MouseEvent): void => {
+        if (!(event.target instanceof Element)) {
+          return;
+        }
+        // Direct child of container
+        let target: HTMLElement | null = null;
+        for (const child of container.children) {
+          if (child instanceof HTMLElement && child.contains(event.target)) {
+            target = child;
+            break;
+          }
+        }
+        if (target !== null) {
+          for (const child of container.children) {
+            if (child === target) {
+              child.classList.add("is-focused");
+            } else {
+              child.classList.remove("is-focused");
+            }
+          }
+        }
+      };
+
+      const observer = new IntersectionObserver(
+        () => {
+          updateFocusedBlock();
+        },
+        {
+          root: scrollParent instanceof HTMLElement ? scrollParent : null,
+          threshold: [0, 0.25, 0.5, 0.75, 1],
+        },
+      );
+
+      for (const child of container.children) {
+        if (child instanceof HTMLElement) {
+          observer.observe(child);
+        }
+      }
+
+      scrollParent.addEventListener("scroll", updateFocusedBlock, { passive: true });
+      container.addEventListener("click", handleBlockClick);
+      updateFocusedBlock();
+
+      return () => {
+        observer.disconnect();
+        scrollParent.removeEventListener("scroll", updateFocusedBlock);
+        container.removeEventListener("click", handleBlockClick);
+        container.removeAttribute("data-focus-mode");
+        for (const child of container.children) {
+          child.classList.remove("is-focused");
+        }
+      };
+    }, [focusMode, html]);
 
     // Task ticks (design D3): one delegated listener per document resolves
     // the clicked item's source span. Keyed on html as well: on first render
@@ -335,8 +617,10 @@ function ReaderPane(api: ExtensionApi) {
     // External links (design D2/D3): every anchor click is prevented so the
     // webview can never navigate from rendered content; http/https/mailto
     // hrefs are handed to the OS handler. The scheme check reads the raw
-    // attribute — a malformed href is ignored, not thrown on. Same keying as
-    // the task-tick listener: attach once per document/content swap.
+    // attribute — a malformed href is ignored, not thrown on. Wikilinks
+    // (task 2.4) resolve through the link index and open in document tabs.
+    // Same keying as the task-tick listener: attach once per
+    // document/content swap.
     useEffect(() => {
       const container = containerRef.current;
       if (container === null) {
@@ -355,6 +639,16 @@ function ReaderPane(api: ExtensionApi) {
         }
         event.preventDefault();
         const href = anchor.getAttribute("href") ?? "";
+        if (href.startsWith("#wikilink:")) {
+          const target = decodeURIComponent(href.slice("#wikilink:".length));
+          const resolved = linkIndex?.resolveTarget(target, document?.path);
+          if (resolved !== null && resolved !== undefined) {
+            tabs.open(resolved).catch((error: unknown) => {
+              console.error("Failed to open wikilink target", target, error);
+            });
+          }
+          return;
+        }
         if (externalScheme.test(href)) {
           openUrl(href).catch((error: unknown) => {
             console.error("Failed to open external link", href, error);
@@ -366,7 +660,7 @@ function ReaderPane(api: ExtensionApi) {
       return () => {
         container.removeEventListener("click", handleClick);
       };
-    }, [html]);
+    }, [html, linkIndex, document]);
 
     // Element identity as memo boundary: react-dom rewrites
     // dangerouslySetInnerHTML on every commit even when the html string is
@@ -392,11 +686,42 @@ function ReaderPane(api: ExtensionApi) {
   };
 }
 
+function FocusModeToggle(api: ExtensionApi) {
+  return function FocusModeToggle(): JSX.Element | null {
+    const focusMode = useSettingBoolean(api, "focusMode", false);
+    const activeDoc = useStoreValue(api.router.activeSource);
+
+    const handleToggle = useCallback(() => {
+      api.settingsValues.set("reading", "focusMode", !focusMode);
+    }, [focusMode]);
+
+    if (activeDoc === null) {
+      return null;
+    }
+
+    return (
+      <QuietButton
+        onClick={handleToggle}
+        title={focusMode ? "Disable Focus Mode" : "Enable Focus Mode"}
+      >
+        <span data-focus-active={focusMode} style={{ display: "inline-flex" }}>
+          <FocusIcon />
+        </span>
+      </QuietButton>
+    );
+  };
+}
+
 function activate(api: ExtensionApi): void {
   api.panes.register({
     id: "reader",
     documentTypes: ["markdown"],
     component: ReaderPane(api),
+  });
+  api.ui.register({
+    id: "focus-mode-toggle",
+    slot: "toolbar",
+    component: FocusModeToggle(api),
   });
 }
 

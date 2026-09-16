@@ -51,3 +51,24 @@ export function onFsChanged(
     handler(event.payload);
   });
 }
+
+export interface WorkspaceSearchMatch {
+  readonly filePath: string;
+  readonly relativePath: string;
+  readonly lineNumber: number;
+  readonly lineContent: string;
+  readonly matchStart: number;
+  readonly matchEnd: number;
+}
+
+export function workspaceSearch(
+  query: string,
+  caseSensitive?: boolean,
+  maxResults?: number,
+): Promise<readonly WorkspaceSearchMatch[]> {
+  return invoke<readonly WorkspaceSearchMatch[]>("workspace_search", {
+    query,
+    caseSensitive,
+    maxResults,
+  });
+}

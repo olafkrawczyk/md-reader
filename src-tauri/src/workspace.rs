@@ -36,6 +36,17 @@ pub struct FsEventPayload {
     pub modified: Vec<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSearchMatch {
+    pub file_path: String,
+    pub relative_path: String,
+    pub line_number: usize,
+    pub line_content: String,
+    pub match_start: usize,
+    pub match_end: usize,
+}
+
 struct ActiveWorkspace {
     root: PathBuf,
     _watcher: notify::RecommendedWatcher,
@@ -311,6 +322,149 @@ fn build_entry(item: &fs::DirEntry, ignored: &HashSet<String>) -> Option<FileEnt
         kind,
         children,
     })
+}
+
+#[tauri::command]
+pub async fn workspace_search(
+    state: State<'_, WorkspaceState>,
+    query: String,
+    case_sensitive: Option<bool>,
+    max_results: Option<usize>,
+) -> Result<Vec<WorkspaceSearchMatch>, String> {
+    let root = state.root()?;
+    let ignored = state.ignored_set();
+    let case_sensitive = case_sensitive.unwrap_or(false);
+    let limit = max_results.unwrap_or(500);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        search_in_workspace(&root, &ignored, &query, case_sensitive, limit)
+    })
+    .await
+    .map_err(|err| format!("search task failed: {err}"))?
+}
+
+fn search_in_workspace(
+    root: &Path,
+    ignored: &HashSet<String>,
+    query: &str,
+    case_sensitive: bool,
+    max_results: usize,
+) -> Result<Vec<WorkspaceSearchMatch>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let files = collect_markdown_files(root, root, ignored);
+    let needle = if case_sensitive {
+        query.to_string()
+    } else {
+        query.to_lowercase()
+    };
+
+    let mut matches: Vec<WorkspaceSearchMatch> = files
+        .par_iter()
+        .flat_map(|file_path| {
+            let mut file_matches = Vec::new();
+            let bytes = match fs::read(file_path) {
+                Ok(b) => b,
+                Err(_) => return file_matches,
+            };
+
+            // Skip binary files
+            if is_binary_content(&bytes) {
+                return file_matches;
+            }
+
+            let content = match String::from_utf8(bytes) {
+                Ok(s) => s,
+                Err(_) => return file_matches,
+            };
+
+            let relative_path = file_path
+                .strip_prefix(root)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| file_path.display().to_string());
+
+            for (line_idx, line) in content.lines().enumerate() {
+                let haystack = if case_sensitive {
+                    line.to_string()
+                } else {
+                    line.to_lowercase()
+                };
+
+                let mut start_idx = 0;
+                while let Some(found_idx) = haystack[start_idx..].find(&needle) {
+                    let match_start = start_idx + found_idx;
+                    let match_end = match_start + needle.len();
+
+                    file_matches.push(WorkspaceSearchMatch {
+                        file_path: file_path.display().to_string(),
+                        relative_path: relative_path.clone(),
+                        line_number: line_idx + 1,
+                        line_content: line.to_string(),
+                        match_start,
+                        match_end,
+                    });
+
+                    start_idx = match_end;
+                }
+            }
+            file_matches
+        })
+        .collect();
+
+    // Sort matches by relative_path and line_number for deterministic order
+    matches.sort_by(|a, b| {
+        a.relative_path
+            .cmp(&b.relative_path)
+            .then_with(|| a.line_number.cmp(&b.line_number))
+            .then_with(|| a.match_start.cmp(&b.match_start))
+    });
+
+    if matches.len() > max_results {
+        matches.truncate(max_results);
+    }
+    Ok(matches)
+}
+
+fn collect_markdown_files(dir: &Path, root: &Path, ignored: &HashSet<String>) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let read = match fs::read_dir(dir) {
+        Ok(r) => r,
+        Err(_) => return files,
+    };
+    for entry in read.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        if name.starts_with('.') || ignored.contains(&name) {
+            continue;
+        }
+
+        let is_dir = fs::symlink_metadata(&path)
+            .map(|m| m.is_dir())
+            .unwrap_or(false);
+
+        if is_dir {
+            files.extend(collect_markdown_files(&path, root, ignored));
+        } else {
+            let is_md = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
+                .unwrap_or(false);
+
+            if is_md {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
+fn is_binary_content(bytes: &[u8]) -> bool {
+    let probe_len = bytes.len().min(512);
+    bytes[..probe_len].contains(&0)
 }
 
 #[tauri::command]
@@ -711,6 +865,104 @@ mod tests {
         assert!(is_ignored_path(&inside, &root, &state.ignored_set()));
         assert!(!is_ignored_path(&outside, &root, &state.ignored_set()));
         assert!(!is_ignored_path(&root, &root, &state.ignored_set()));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn workspace_search_finds_matches_case_insensitively() {
+        let dir = std::env::temp_dir().join("mdr-ws-test-search");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("a.md"), "Rust is great.\nWrite rust with love.").unwrap();
+        fs::write(dir.join("b.md"), "no matching content here").unwrap();
+
+        let ignored: HashSet<String> = DEFAULT_IGNORED_DIRS
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
+        let matches =
+            search_in_workspace(&dir, &ignored, "rust", false, 100).unwrap();
+        assert_eq!(matches.len(), 2, "expected 2 case-insensitive matches");
+        assert_eq!(matches[0].file_path, dir.join("a.md").display().to_string());
+        assert_eq!(matches[0].line_number, 1);
+        assert_eq!(matches[0].line_content, "Rust is great.");
+        assert_eq!(matches[0].match_start, 0);
+        assert_eq!(matches[0].match_end, 4);
+        assert_eq!(matches[1].line_number, 2);
+
+        // Case-sensitive mode only hits the lowercase occurrence.
+        let sensitive =
+            search_in_workspace(&dir, &ignored, "rust", true, 100).unwrap();
+        assert_eq!(sensitive.len(), 1);
+        assert_eq!(sensitive[0].line_number, 2);
+
+        // Empty query returns no matches.
+        let empty = search_in_workspace(&dir, &ignored, "  ", false, 100).unwrap();
+        assert!(empty.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn workspace_search_excludes_ignored_dirs_hidden_and_binary() {
+        let dir = std::env::temp_dir().join("mdr-ws-test-search-ignore");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("node_modules")).unwrap();
+        fs::create_dir_all(dir.join(".hiddendir")).unwrap();
+        fs::write(dir.join("node_modules/pkg.md"), "tauri lives here").unwrap();
+        fs::write(dir.join(".hiddendir/secret.md"), "tauri hidden here").unwrap();
+        fs::write(dir.join("visible.md"), "tauri visible here").unwrap();
+        fs::write(dir.join("notes.txt"), "tauri in a txt").unwrap();
+        fs::write(dir.join("image.md"), [0u8, 159, 146, 150]).unwrap();
+
+        let ignored: HashSet<String> = DEFAULT_IGNORED_DIRS
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
+        let matches =
+            search_in_workspace(&dir, &ignored, "tauri", false, 100).unwrap();
+        assert_eq!(matches.len(), 1, "expected only visible.md to match: {matches:?}");
+        assert_eq!(matches[0].relative_path, "visible.md");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn workspace_search_respects_max_results() {
+        let dir = std::env::temp_dir().join("mdr-ws-test-search-limit");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("doc.md"), "hit\nhit\nhit\nhit\nhit").unwrap();
+
+        let ignored: HashSet<String> = DEFAULT_IGNORED_DIRS
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
+        let matches =
+            search_in_workspace(&dir, &ignored, "hit", false, 3).unwrap();
+        assert_eq!(matches.len(), 3);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn workspace_search_reports_multiple_hits_per_line() {
+        let dir = std::env::temp_dir().join("mdr-ws-test-search-multi");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("doc.md"), "todo first todo second todo").unwrap();
+
+        let ignored: HashSet<String> = DEFAULT_IGNORED_DIRS
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
+        let matches =
+            search_in_workspace(&dir, &ignored, "todo", false, 100).unwrap();
+        assert_eq!(matches.len(), 3);
+        assert_eq!(matches[0].match_start, 0);
+        assert_eq!(matches[1].match_start, 11);
+        assert_eq!(matches[2].match_start, 23);
 
         let _ = fs::remove_dir_all(&dir);
     }

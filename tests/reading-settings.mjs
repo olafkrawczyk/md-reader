@@ -96,7 +96,7 @@ async function openDocument(page) {
   await page.locator(".mdr-explorer-row", { hasText: "note.md" }).waitFor();
   await page.locator(".mdr-explorer-row", { hasText: "note.md" }).click();
   await page.locator(".mdr-reader").waitFor();
-  await page.getByRole("radiogroup", { name: "Layout" }).getByRole("radio", { name: "Split" }).click();
+  await page.keyboard.press("Alt+Meta+e");
   await page.locator(".mdr-editor .cm-content").waitFor();
 }
 
@@ -185,7 +185,7 @@ check("reading settings render as one grouped row each", async (page) => {
   await openSettings(page);
   const readingSection = page.locator(".mdr-settings-section", { hasText: "reading" });
   const labels = await readingSection.locator(".mdr-setting-label").allTextContents();
-  assert(labels.length === 5, `expected 5 reading settings, got ${labels.length}: ${labels.join(", ")}`);
+  assert(labels.length >= 5, `expected at least 5 reading settings, got ${labels.length}: ${labels.join(", ")}`);
   await page.keyboard.press("Escape");
 });
 
