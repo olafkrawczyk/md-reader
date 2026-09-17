@@ -12,6 +12,7 @@
     "install:app": "bash scripts/install-app.sh",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
+    "test:focus": "node tests/focus-mode.mjs",
     "test:ui": "node tests/reading-settings.mjs",
     "test:safety": "node tests/document-safety.mjs",
     "test:ticks": "node tests/task-ticks.mjs",

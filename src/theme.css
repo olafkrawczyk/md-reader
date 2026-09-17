@@ -575,6 +575,7 @@ body.mdr-resizing-sidebar .mdr-sidebar-resizer {
   outline: none;
   display: flex;
   flex-direction: column;
+  container-type: size;
 }
 
 .mdr-pane[data-focused="true"] {
@@ -821,14 +822,30 @@ nav.mdr-explorer[data-drop="true"] {
   padding: 40px 48px;
 }
 
-/* Focus / dimming mode (task 1.5) */
-.mdr-reader[data-focus-mode="true"] > * {
-  opacity: 0.28;
-  transition: opacity 180ms ease;
+/* Focus / dimming mode (design D1, D4, D5) */
+.mdr-reader[data-focus-mode="true"] {
+  --mdr-focus-band: 42cqh;
+  padding-block: var(--mdr-focus-band) calc(100cqh - var(--mdr-focus-band));
 }
 
-.mdr-reader[data-focus-mode="true"] > *.is-focused {
+.mdr-reader[data-focus-mode="true"] [data-focus-unit] {
+  opacity: 0.28;
+  transition: opacity 180ms ease;
+  scroll-margin-block-start: var(--mdr-focus-band);
+}
+
+.mdr-reader[data-focus-mode="true"] [data-focus-unit].is-ancestor {
+  opacity: 0.55;
+}
+
+.mdr-reader[data-focus-mode="true"] [data-focus-unit].is-focused {
   opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdr-reader[data-focus-mode="true"] [data-focus-unit] {
+    transition: none;
+  }
 }
 
 /* Bionic reading (task 1.7) */

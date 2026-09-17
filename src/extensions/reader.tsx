@@ -150,6 +150,51 @@ function stampSourceLines(tree: unknown): void {
   }
 }
 
+const FOCUS_UNIT_TAGS = new Set([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "pre",
+  "table",
+  "hr",
+  "img",
+  "blockquote",
+]);
+
+/**
+ * Stamps discrete readable blocks with data-focus-unit (design D3).
+ * List containers themselves are not units; their direct top-level list items are.
+ * Nested lists are not stamped — they ride with their containing top-level li.
+ */
+function stampFocusUnits(tree: unknown): void {
+  if (!isRecord(tree) || !Array.isArray(tree.children)) {
+    return;
+  }
+  for (const child of tree.children) {
+    if (!isRecord(child) || child.type !== "element") {
+      continue;
+    }
+    const tag = typeof child.tagName === "string" ? child.tagName : "";
+    if (FOCUS_UNIT_TAGS.has(tag)) {
+      const properties = isRecord(child.properties) ? child.properties : {};
+      child.properties = { ...properties, "data-focus-unit": "" };
+    } else if (tag === "ul" || tag === "ol") {
+      if (Array.isArray(child.children)) {
+        for (const item of child.children) {
+          if (isRecord(item) && item.type === "element" && item.tagName === "li") {
+            const properties = isRecord(item.properties) ? item.properties : {};
+            item.properties = { ...properties, "data-focus-unit": "" };
+          }
+        }
+      }
+    }
+  }
+}
+
 /**
  * The rendered block containing a source line. Only block starts are stamped,
  * so an arbitrary line (a search hit inside a paragraph, an explicit `#L42`)
@@ -173,8 +218,107 @@ const renderer = unified()
   .use(() => (tree: unknown) => {
     enableTaskInputs(tree, false);
     stampSourceLines(tree);
+    stampFocusUnits(tree);
   })
   .use(rehypeStringify, { allowDangerousHtml: true });
+
+interface FocusUnit {
+  readonly element: HTMLElement;
+  readonly top: number;
+  readonly bottom: number;
+  readonly isHeading: boolean;
+}
+
+/** Accumulates offsetTop to the scroll parent so geometry is cached in container coordinates (design D6). */
+function getUnitTop(element: HTMLElement, scrollParent: HTMLElement): number {
+  let top = 0;
+  let curr: HTMLElement | null = element;
+  while (curr !== null && curr !== scrollParent) {
+    top += curr.offsetTop;
+    const parent: Element | null = curr.offsetParent;
+    curr = parent instanceof HTMLElement ? parent : null;
+  }
+  if (curr !== scrollParent) {
+    let parentTop = 0;
+    let pCurr: HTMLElement | null = scrollParent;
+    while (pCurr !== null) {
+      parentTop += pCurr.offsetTop;
+      const parent: Element | null = pCurr.offsetParent;
+      pCurr = parent instanceof HTMLElement ? parent : null;
+    }
+    top -= parentTop;
+  }
+  return top;
+}
+
+/** Resolves the pixel offset of the focal band within the reading pane (design D1). */
+function getFocusBand(container: HTMLElement, pane: HTMLElement): number {
+  const raw = getComputedStyle(container).getPropertyValue("--mdr-focus-band").trim();
+  const val = parseFloat(raw);
+  if (!Number.isFinite(val)) return pane.clientHeight * 0.42;
+  if (raw.endsWith("cqh") || raw.endsWith("%")) return (val / 100) * pane.clientHeight;
+  if (raw.endsWith("vh")) return (val / 100) * window.innerHeight;
+  if (raw.endsWith("px")) return val;
+  return val < 1 ? val * pane.clientHeight : val;
+}
+
+/** Binary search for the unit whose [top, bottom) span contains the focal band (design D2). */
+function findContainingUnit(units: readonly FocusUnit[], focalY: number): number {
+  let low = 0;
+  let high = units.length - 1;
+  // 1px tolerance absorbs subpixel layout rounding between getUnitTop (integer offsetTop)
+  // and scrollIntoView (floating-point subpixel position).
+  const EPSILON = 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const unit = units[mid];
+    if (unit === undefined) {
+      break;
+    }
+    if (focalY < unit.top - EPSILON) {
+      high = mid - 1;
+    } else if (focalY >= unit.bottom) {
+      low = mid + 1;
+    } else {
+      return mid;
+    }
+  }
+  return -1;
+}
+
+/** Resolves focused unit index: containment with keep-previous in gaps, fallback to first/last (design D2). */
+function resolveFocusIndex(
+  units: readonly FocusUnit[],
+  focalY: number,
+  prevIndex: number,
+): number {
+  if (units.length === 0) return -1;
+  const first = units[0];
+  if (first !== undefined && focalY <= first.top) {
+    return 0;
+  }
+  const last = units[units.length - 1];
+  if (last !== undefined && focalY >= last.bottom) {
+    return units.length - 1;
+  }
+  const hit = findContainingUnit(units, focalY);
+  if (hit !== -1) return hit;
+
+  // Band sits in a margin gap between unit i and unit i + 1.
+  let nextIndex = units.length - 1;
+  for (let i = 0; i < units.length; i++) {
+    const unit = units[i];
+    if (unit !== undefined && unit.top >= focalY) {
+      nextIndex = i;
+      break;
+    }
+  }
+  // Hold previous focus when it was one of the two bordering units (hysteresis).
+  if (prevIndex === nextIndex || prevIndex === nextIndex - 1) {
+    return prevIndex;
+  }
+  return nextIndex;
+}
 
 /**
  * Re-renders whenever the document changes (e.g. edits in split mode): the
@@ -276,6 +420,16 @@ function scrollRangeIntoView(range: Range): void {
     range.startContainer instanceof HTMLElement
       ? range.startContainer
       : range.startContainer.parentElement;
+  // When focus mode is active, scrolling the containing focus unit parks it at
+  // the focal band via scroll-margin-block-start, keeping the match on a full-opacity unit.
+  const reader = node?.closest<HTMLElement>(".mdr-reader");
+  if (reader?.getAttribute("data-focus-mode") === "true") {
+    const unit = node?.closest<HTMLElement>("[data-focus-unit]");
+    if (unit !== null && unit !== undefined) {
+      unit.scrollIntoView({ block: "start" });
+      return;
+    }
+  }
   while (node !== null && node !== document.body) {
     const overflowY = getComputedStyle(node).overflowY;
     if (overflowY === "auto" || overflowY === "scroll") {
@@ -413,7 +567,7 @@ class ReaderSearchTarget implements SearchTarget {
 
 function ReaderPane(api: ExtensionApi) {
   return function ReaderPane(): JSX.Element {
-    const { document } = usePaneHost();
+    const { document, setKeyHandler } = usePaneHost();
     const astCache = useService(api.services, mdAstCacheKey);
     const text = useDocumentText(document);
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -425,6 +579,7 @@ function ReaderPane(api: ExtensionApi) {
     const highlightCode = useService(api.services, highlightCodeKey);
     const bionicReading = useSettingBoolean(api, "bionicReading", false);
     const focusMode = useSettingBoolean(api, "focusMode", false);
+    const prevFocusModeRef = useRef(focusMode);
 
     const html = useMemo<string | null>(() => {
       if (document === null || astCache === null || text === null) {
@@ -472,6 +627,15 @@ function ReaderPane(api: ExtensionApi) {
           template.innerHTML = markup;
           const replacement = template.content.firstElementChild;
           if (replacement !== null) {
+            if (pre.hasAttribute("data-focus-unit")) {
+              replacement.setAttribute("data-focus-unit", "");
+            }
+            if (pre.hasAttribute("data-line")) {
+              replacement.setAttribute("data-line", pre.getAttribute("data-line") ?? "");
+            }
+            if (pre.classList.contains("is-focused")) {
+              replacement.classList.add("is-focused");
+            }
             pre.replaceWith(replacement);
           }
         }
@@ -580,123 +744,210 @@ function ReaderPane(api: ExtensionApi) {
       };
     }, [outlineNav, html]);
 
-    // Focus/dimming mode (design D4 / tasks 1.5):
-    // Attaches an IntersectionObserver to direct block children of the reader container.
-    // Accurately highlights the active reading block:
-    // - At the top of the document (scrollTop near 0): highlights the first block (e.g. title/H1).
-    // - At the bottom of the document (scrollTop at max): highlights the final block.
-    // - Throughout the document: tracks the reading focal point smoothly.
-    // - Clicking any block immediately focuses it.
+    // Focus mode (designs D1–D7): a fixed focal band selects the unit whose
+    // span contains it. Geometry is cached per content change and invalidated
+    // by one ResizeObserver; the scroll path is a binary search over cached
+    // numbers with no DOM queries or forced layout.
     useEffect(() => {
       const container = containerRef.current;
       if (container === null) {
         return;
       }
       if (!focusMode) {
-        container.removeAttribute("data-focus-mode");
-        for (const child of container.children) {
-          child.classList.remove("is-focused");
+        if (container.getAttribute("data-focus-mode") === "true") {
+          const anchor = container.querySelector<HTMLElement>(".is-focused");
+          container.removeAttribute("data-focus-mode");
+          container
+            .querySelectorAll(".is-focused, .is-ancestor")
+            .forEach((el) => el.classList.remove("is-focused", "is-ancestor"));
+          if (anchor !== null) {
+            anchor.scrollIntoView({ block: "start" });
+          }
         }
+        prevFocusModeRef.current = false;
+        setKeyHandler(null);
         return;
       }
 
-      container.setAttribute("data-focus-mode", "true");
-      const scrollParent = container.closest(".mdr-pane") ?? container;
+      const scrollParent = container.closest<HTMLElement>(".mdr-pane") ?? container;
+      const pane = scrollParent instanceof HTMLElement ? scrollParent : container;
 
-      const updateFocusedBlock = (): void => {
-        const blocks = Array.from(container.children).filter(
-          (el): el is HTMLElement => el instanceof HTMLElement,
-        );
-        if (blocks.length === 0) {
-          return;
-        }
-
-        const scrollTop = scrollParent.scrollTop;
-        const maxScroll = scrollParent.scrollHeight - scrollParent.clientHeight;
-
-        // The focal line sweeps continuously from the top of the viewport
-        // (scrollTop = 0) to the bottom (scrollTop = maxScroll), so the first
-        // and last blocks are reachable and no block is skipped between them.
-        const parentRect = scrollParent.getBoundingClientRect();
-        const scrollRatio =
-          maxScroll > 0 ? Math.min(1, Math.max(0, scrollTop / maxScroll)) : 0.5;
-        const focalRatio = 0.05 + scrollRatio * 0.9;
-        const focalY = parentRect.top + parentRect.height * focalRatio;
-
-        let closestBlock: HTMLElement | null = null;
-        let minDistance = Number.POSITIVE_INFINITY;
-        for (const block of blocks) {
-          const rect = block.getBoundingClientRect();
-          const blockCenter = (rect.top + rect.bottom) / 2;
-          const distance = Math.abs(blockCenter - focalY);
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestBlock = block;
+      if (!prevFocusModeRef.current) {
+        prevFocusModeRef.current = true;
+        // Anchor on toggle: capture unit at focal band before padding alters layout (design Risks / task 3.7).
+        const paneRect = pane.getBoundingClientRect();
+        const band = getFocusBand(container, pane);
+        const bandY = paneRect.top + band;
+        let anchor: HTMLElement | null = null;
+        for (const el of container.querySelectorAll<HTMLElement>("[data-focus-unit]")) {
+          const r = el.getBoundingClientRect();
+          if (r.top <= bandY && bandY < r.bottom) {
+            anchor = el;
+            break;
           }
-        }
-
-        for (const block of blocks) {
-          if (block === closestBlock) {
-            block.classList.add("is-focused");
-          } else {
-            block.classList.remove("is-focused");
-          }
-        }
-      };
-
-      const handleBlockClick = (event: MouseEvent): void => {
-        if (!(event.target instanceof Element)) {
-          return;
-        }
-        // Direct child of container
-        let target: HTMLElement | null = null;
-        for (const child of container.children) {
-          if (child instanceof HTMLElement && child.contains(event.target)) {
-            target = child;
+          if (r.top >= bandY) {
+            anchor = el;
             break;
           }
         }
-        if (target !== null) {
-          for (const child of container.children) {
-            if (child === target) {
-              child.classList.add("is-focused");
-            } else {
-              child.classList.remove("is-focused");
-            }
+        container.setAttribute("data-focus-mode", "true");
+        if (anchor !== null) {
+          anchor.scrollIntoView({ block: "start" });
+        }
+      } else {
+        container.setAttribute("data-focus-mode", "true");
+      }
+
+      let units: FocusUnit[] = [];
+      let focusedIndex = -1;
+      let ancestorIndex = -1;
+
+      const buildCache = (): void => {
+        const elements = Array.from(
+          container.querySelectorAll<HTMLElement>("[data-focus-unit]"),
+        );
+        units = elements.map((element) => {
+          const top = getUnitTop(element, pane);
+          return {
+            element,
+            top,
+            bottom: top + element.offsetHeight,
+            isHeading: /^H[1-6]$/.test(element.tagName),
+          };
+        });
+      };
+
+      const setFocusClasses = (index: number): void => {
+        if (index === focusedIndex) {
+          return;
+        }
+        const previous = units[focusedIndex];
+        if (previous !== undefined) {
+          previous.element.classList.remove("is-focused");
+        }
+        const current = units[index];
+        if (current !== undefined) {
+          current.element.classList.add("is-focused");
+        }
+        focusedIndex = index;
+
+        // The nearest preceding heading unit stays legible (design D4).
+        let nextAncestor = -1;
+        for (let i = index - 1; i >= 0; i--) {
+          if (units[i]?.isHeading) {
+            nextAncestor = i;
+            break;
           }
+        }
+        if (nextAncestor !== ancestorIndex) {
+          const prevAncestor = units[ancestorIndex];
+          if (prevAncestor !== undefined) {
+            prevAncestor.element.classList.remove("is-ancestor");
+          }
+          const next = units[nextAncestor];
+          if (next !== undefined) {
+            next.element.classList.add("is-ancestor");
+          }
+          ancestorIndex = nextAncestor;
         }
       };
 
-      const observer = new IntersectionObserver(
-        () => {
-          updateFocusedBlock();
-        },
-        {
-          root: scrollParent instanceof HTMLElement ? scrollParent : null,
-          threshold: [0, 0.25, 0.5, 0.75, 1],
-        },
-      );
-
-      for (const child of container.children) {
-        if (child instanceof HTMLElement) {
-          observer.observe(child);
+      const updateFocus = (): void => {
+        if (units.length === 0) {
+          return;
         }
-      }
+        const band = getFocusBand(container, pane);
+        const focalY = pane.scrollTop + band;
+        setFocusClasses(resolveFocusIndex(units, focalY, focusedIndex));
+      };
 
-      scrollParent.addEventListener("scroll", updateFocusedBlock, { passive: true });
-      container.addEventListener("click", handleBlockClick);
-      updateFocusedBlock();
+      const scrollToUnit = (index: number): void => {
+        const unit = units[index];
+        if (unit === undefined) {
+          return;
+        }
+        unit.element.scrollIntoView({ block: "start" });
+        setFocusClasses(index);
+      };
+
+      const handleKey = (event: KeyboardEvent): void => {
+        if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+          return;
+        }
+        const target = event.target;
+        if (
+          target instanceof HTMLElement &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.isContentEditable)
+        ) {
+          return;
+        }
+        if (event.key === "Escape") {
+          api.settingsValues.set("reading", "focusMode", false);
+          event.preventDefault();
+          return;
+        }
+        const step =
+          event.key === "ArrowDown" || event.key === "j"
+            ? 1
+            : event.key === "ArrowUp" || event.key === "k"
+              ? -1
+              : 0;
+        if (step === 0 || units.length === 0) {
+          return;
+        }
+        event.preventDefault();
+        const next = Math.max(0, Math.min(focusedIndex + step, units.length - 1));
+        if (next !== focusedIndex) {
+          scrollToUnit(next);
+        }
+      };
+      setKeyHandler(handleKey);
+
+      const handleClick = (event: MouseEvent): void => {
+        if (!(event.target instanceof Element)) {
+          return;
+        }
+        const unit = event.target.closest<HTMLElement>("[data-focus-unit]");
+        if (unit === null || !container.contains(unit)) {
+          return;
+        }
+        const index = units.findIndex((u) => u.element === unit);
+        if (index !== -1) {
+          scrollToUnit(index);
+        }
+      };
+
+      buildCache();
+      updateFocus();
+
+      const observer = new ResizeObserver(() => {
+        const savedIndex = focusedIndex;
+        buildCache();
+        if (savedIndex >= 0 && savedIndex < units.length) {
+          setFocusClasses(savedIndex);
+        } else {
+          focusedIndex = -1;
+          updateFocus();
+        }
+      });
+      observer.observe(container);
+
+      scrollParent.addEventListener("scroll", updateFocus, { passive: true });
+      container.addEventListener("click", handleClick);
 
       return () => {
         observer.disconnect();
-        scrollParent.removeEventListener("scroll", updateFocusedBlock);
-        container.removeEventListener("click", handleBlockClick);
+        scrollParent.removeEventListener("scroll", updateFocus);
+        container.removeEventListener("click", handleClick);
+        setKeyHandler(null);
         container.removeAttribute("data-focus-mode");
-        for (const child of container.children) {
-          child.classList.remove("is-focused");
-        }
+        container
+          .querySelectorAll(".is-focused, .is-ancestor")
+          .forEach((el) => el.classList.remove("is-focused", "is-ancestor"));
       };
-    }, [focusMode, html]);
+    }, [focusMode, html, setKeyHandler]);
 
     // Task ticks (design D3): one delegated listener per document resolves
     // the clicked item's source span. Keyed on html as well: on first render
