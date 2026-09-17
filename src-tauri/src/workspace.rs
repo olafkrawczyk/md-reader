@@ -251,14 +251,16 @@ pub fn activate_workspace(
         return Err(format!("not a folder: {root}"));
     }
 
-    let watcher = start_watcher(canonical.clone(), state.ignored_dirs(), app)?;
+    let watcher = start_watcher(canonical.clone(), state.ignored_dirs(), app.clone())?;
 
     let mut active = state.active.lock().map_err(|err| err.to_string())?;
     // Dropping the previous watcher stops its thread via the closed channel.
     *active = Some(ActiveWorkspace {
-        root: canonical,
+        root: canonical.clone(),
         _watcher: watcher,
     });
+    crate::recents::record(&canonical.to_string_lossy());
+    crate::menu::refresh_recents(&app);
     Ok(())
 }
 

@@ -256,6 +256,7 @@ export function useGlobalShortcuts(
   );
 
   useEffect(() => {
+    // Global keymap — keep ShortcutsPanel.tsx in sync when a binding changes.
     function onKeyDown(event: KeyboardEvent): void {
       const mod = event.metaKey || event.ctrlKey;
       if (mod && event.key === "s") {

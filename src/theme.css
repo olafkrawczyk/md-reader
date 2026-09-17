@@ -488,19 +488,6 @@ body.mdr-resizing-sidebar .mdr-sidebar-resizer {
   text-align: center;
 }
 
-.mdr-sidebar-empty button {
-  font: var(--mdr-text-body);
-  color: var(--mdr-color-accent);
-  background: none;
-  border: none;
-  padding: var(--mdr-space-1);
-  cursor: default;
-}
-
-.mdr-sidebar-empty button:hover {
-  text-decoration: underline;
-}
-
 /* ---- main region ---- */
 
 .mdr-main-region {
@@ -537,6 +524,35 @@ body.mdr-resizing-sidebar .mdr-sidebar-resizer {
   font: var(--mdr-text-body);
   color: var(--mdr-color-fg-muted);
   margin: 0 0 var(--mdr-space-3);
+}
+
+.mdr-welcome-recents {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mdr-space-1);
+  margin-top: var(--mdr-space-3);
+  max-width: 320px;
+  width: 100%;
+}
+
+.mdr-welcome-recent-item {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-accent);
+  background: none;
+  border: none;
+  padding: var(--mdr-space-1) var(--mdr-space-2);
+  border-radius: var(--mdr-radius);
+  cursor: default;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mdr-welcome-recent-item:hover {
+  background: var(--mdr-fill-hover);
+  text-decoration: underline;
 }
 
 /* ---- split layout ---- */
@@ -1101,6 +1117,42 @@ nav.mdr-explorer[data-drop="true"] {
 
 .mdr-setting-label {
   font: var(--mdr-text-body);
+}
+
+/* ---- shortcuts reference ---- */
+
+.mdr-shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.mdr-shortcuts-row {
+  height: 32px;
+}
+
+.mdr-shortcuts-row + .mdr-shortcuts-row {
+  border-top: 1px solid var(--mdr-color-separator);
+}
+
+.mdr-shortcuts-keys {
+  width: 140px;
+  vertical-align: middle;
+}
+
+.mdr-shortcuts-keys kbd {
+  font-family: var(--mdr-font-ui);
+  font-size: 12px;
+  background: var(--mdr-color-bg-elevated);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.mdr-shortcuts-action {
+  font: var(--mdr-text-body);
+  color: var(--mdr-color-fg);
+  vertical-align: middle;
 }
 
 /* ---- reading pane fallback for unlabeled code ---- */
