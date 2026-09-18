@@ -20,6 +20,7 @@ export interface AppShellState {
   readonly ready: boolean;
   readonly status: StatusMessage | null;
   readonly settingsOpen: boolean;
+  readonly shortcutsOpen: boolean;
   readonly sidebar: SidebarState;
 }
 
@@ -29,6 +30,8 @@ export type AppShellAction =
   | { readonly type: "statusCleared" }
   | { readonly type: "settingsOpened" }
   | { readonly type: "settingsClosed" }
+  | { readonly type: "shortcutsOpened" }
+  | { readonly type: "shortcutsClosed" }
   | { readonly type: "sidebarToggled" }
   | { readonly type: "sidebarResizeStarted" }
   | { readonly type: "sidebarResizeMoved"; readonly width: number }
@@ -45,6 +48,7 @@ export const initialAppShellState: AppShellState = {
   ready: false,
   status: null,
   settingsOpen: false,
+  shortcutsOpen: false,
   sidebar: { open: true, width: 240, resizing: false },
 };
 
@@ -63,6 +67,10 @@ export function appShellReducer(
       return { ...state, settingsOpen: true };
     case "settingsClosed":
       return { ...state, settingsOpen: false };
+    case "shortcutsOpened":
+      return { ...state, shortcutsOpen: true };
+    case "shortcutsClosed":
+      return { ...state, shortcutsOpen: false };
     case "sidebarToggled":
       return {
         ...state,

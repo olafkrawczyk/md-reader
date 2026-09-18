@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import type { JSX } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -17,6 +17,7 @@ import { CloseGuardDialog } from "./core/safety";
 import { registerMenuAction } from "./core/menu/menuActions";
 import { useStoreSelection, useStoreValue } from "./core/state/storeHooks";
 import { SettingsPanel } from "./core/settings/SettingsPanel";
+import { ShortcutsPanel } from "./core/settings/ShortcutsPanel";
 import { QuietButton } from "./core/ui/controls";
 import { FolderOpenIcon, SettingsIcon, SidebarIcon } from "./core/ui/icons";
 import { tabs } from "./core/tabs/tabStore";
@@ -84,6 +85,7 @@ function App(): JSX.Element {
   const toggleSidebar = useCallback(() => dispatch({ type: "sidebarToggled" }), [dispatch]);
   const openSettings = useCallback(() => dispatch({ type: "settingsOpened" }), [dispatch]);
   const closeSettings = useCallback(() => dispatch({ type: "settingsClosed" }), [dispatch]);
+  const closeShortcuts = useCallback(() => dispatch({ type: "shortcutsClosed" }), [dispatch]);
 
   const handleOpenFolder = useCallback(() => {
     open({ directory: true, multiple: false })
@@ -104,6 +106,49 @@ function App(): JSX.Element {
     () => registerMenuAction("open-folder", handleOpenFolder),
     [handleOpenFolder],
   );
+
+  const openRecentFolder = useCallback(
+    (path?: string) => {
+      if (!path) {
+        return;
+      }
+      api.workspace
+        .openFolder(path)
+        .then(() => {
+          api.layout.activateDefault(api.presets.all());
+          dispatch({ type: "statusCleared" });
+        })
+        .catch((err: unknown) => {
+          dispatch({ type: "statusShown", message: { text: String(err), tone: "error" } });
+        });
+    },
+    [dispatch],
+  );
+
+  // Open Recent submenu entries and the welcome-screen recent list share this.
+  useEffect(
+    () => registerMenuAction("open-recent", openRecentFolder),
+    [openRecentFolder],
+  );
+
+  useEffect(
+    () => registerMenuAction("show-shortcuts", () => dispatch({ type: "shortcutsOpened" })),
+    [dispatch],
+  );
+
+  // Read once: this list only renders in the no-workspace welcome state,
+  // and opening a folder leaves that state, so it never needs to update
+  // while visible (see design.md — "The welcome list is read once").
+  const [recentFolders, setRecentFolders] = useState<string[]>([]);
+  useEffect(() => {
+    invoke<string[]>("recent_folders")
+      .then((folders) => {
+        setRecentFolders(folders);
+      })
+      .catch((err: unknown) => {
+        console.error("failed to load recent folders", err);
+      });
+  }, []);
 
   // Single click activates without promoting; double-click opens for good.
   const activateTab = useCallback((path: string) => {
@@ -221,7 +266,7 @@ function App(): JSX.Element {
                 />
               )}
               <div className="mdr-main-region">
-                {showWelcome ? (
+                {workspaceRoot === null ? (
                   <div className="mdr-welcome">
                     <h1 className="mdr-welcome-title">md-reader</h1>
                     <p className="mdr-welcome-caption">
@@ -234,6 +279,25 @@ function App(): JSX.Element {
                     >
                       Open Folder…
                     </button>
+                    {recentFolders.length > 0 && (
+                      <div className="mdr-welcome-recents">
+                        {recentFolders.map((path) => (
+                          <button
+                            key={path}
+                            type="button"
+                            className="mdr-welcome-recent-item"
+                            title={path}
+                            onClick={() => openRecentFolder(path)}
+                          >
+                            {baseName(path)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : tabList.length === 0 ? (
+                  <div className="mdr-welcome">
+                    <p className="mdr-empty">No file open.</p>
                   </div>
                 ) : mainSlots.length > 0 ? (
                   <SplitLayout key={slotSignature(mainSlots)} slots={mainSlots} />
@@ -253,6 +317,10 @@ function App(): JSX.Element {
         api={api}
         open={shell.settingsOpen}
         onClose={closeSettings}
+      />
+      <ShortcutsPanel
+        open={shell.shortcutsOpen}
+        onClose={closeShortcuts}
       />
       <CloseGuardDialog />
       {api.ui.bySlot("overlay").map((contribution) => (

@@ -24,6 +24,7 @@
     "test:editor": "node tests/editor-experience.mjs",
     "test:highlighting": "node tests/code-highlighting.mjs",
     "test:cache": "node tests/highlight-cache.mjs",
+    "test:menu": "node tests/menu-actions.mjs",
     "test:webkit": "node tests/webkit-apis.mjs"
   },
   "dependencies": {

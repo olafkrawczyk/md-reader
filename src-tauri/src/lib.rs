@@ -80,6 +80,7 @@ fn report_spike_result(attempt: SpikeAttemptReport) {
 
 mod cli;
 mod menu;
+mod recents;
 mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -102,6 +103,7 @@ pub fn run() {
         .register_uri_scheme_protocol("mdext", |_ctx, request| serve_extension_module(&request))
         .invoke_handler(tauri::generate_handler![
             read_extension_source,
+            recents::recent_folders,
             report_spike_result,
             cli::take_pending_cli_open,
             menu::set_workspace_menu_enabled,

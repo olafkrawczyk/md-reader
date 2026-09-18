@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { DragEvent, JSX, MouseEvent as ReactMouseEvent } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
 import type { FileEntry } from "../core/workspace/types";
 import { tabs } from "../core/tabs/tabStore";
@@ -511,19 +510,6 @@ function SidebarPane(api: ExtensionApi) {
     );
     const [explorer, dispatch] = useReducer(explorerReducer, initialExplorerState);
 
-    const handleOpenFolder = useCallback(() => {
-      open({ directory: true, multiple: false })
-        .then(async (selection) => {
-          if (typeof selection === "string") {
-            await api.workspace.openFolder(selection);
-            api.layout.activateDefault(api.presets.all());
-          }
-        })
-        .catch((err: unknown) => {
-          console.error("failed to open folder", err);
-        });
-    }, []);
-
     const documentType = useCallback(
       (path: string) => api.workspace.documentTypes.typeForPath(path).id,
       [],
@@ -725,9 +711,6 @@ function SidebarPane(api: ExtensionApi) {
       return (
         <div className="mdr-sidebar-empty">
           <p className="mdr-empty">No folder open.</p>
-          <button type="button" onClick={handleOpenFolder}>
-            Open Folder…
-          </button>
         </div>
       );
     }
