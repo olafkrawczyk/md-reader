@@ -2,6 +2,17 @@
   "name": "md-reader",
   "private": true,
   "version": "0.1.0",
+  "description": "A calm, native macOS markdown reader for notes, docs, and knowledge bases.",
+  "license": "MIT",
+  "author": "Olaf Krawczyk",
+  "homepage": "https://github.com/olafkrawczyk/md-reader#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/olafkrawczyk/md-reader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/olafkrawczyk/md-reader/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

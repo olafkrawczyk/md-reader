@@ -39,6 +39,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "A calm, native macOS markdown reader.",
+    "longDescription": "md-reader is a local-first, zero-telemetry markdown reader and editor for macOS. Read rendered documents with comfortable typography, edit the source in place, and navigate wikilinks, backlinks, an outline, and workspace-wide search — all without a database.",
+    "copyright": "Copyright © 2026 Olaf Krawczyk",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
