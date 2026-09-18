@@ -3,3 +3,16 @@ dist/
 src-tauri/target/
 src-tauri/gen/schemas/
 .DS_Store
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+*.provisionprofile
+.npmrc
+.netrc
