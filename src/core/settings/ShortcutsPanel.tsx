@@ -15,6 +15,7 @@ interface ShortcutEntry {
 // Upgrade to a registry if extension-contributed shortcuts are needed.
 const SHORTCUTS: readonly ShortcutEntry[] = [
   { keys: "⌘O", action: "Open Folder…" },
+  { keys: "⌘P", action: "Quick Open" },
   { keys: "⌘S", action: "Save Document" },
   { keys: "⌘E", action: "Toggle Reader / Editor" },
   { keys: "⌥⌘E", action: "Toggle Side-by-Side Split" },

@@ -12,6 +12,7 @@ import type { Document } from "../core/workspace/document";
 import { searchTargetRegistryKey } from "../core/search/searchTypes";
 import type { MatchState, SearchTarget } from "../core/search/searchTypes";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { outlineNavigationKey, usePendingJump } from "./outline";
 import type { OutlineJumpTarget } from "./outline";
 import { FocusIcon } from "../core/ui/icons";
@@ -221,6 +222,63 @@ const renderer = unified()
     stampFocusUnits(tree);
   })
   .use(rehypeStringify, { allowDangerousHtml: true });
+
+/**
+ * Resolves local image sources to Tauri asset protocol URLs.
+ * Leaves absolute URLs (http:, https:, data:, etc.) untouched.
+ */
+export function resolveImageSources(tree: unknown, docPath: string): void {
+  if (!isRecord(tree) || !Array.isArray(tree.children)) {
+    return;
+  }
+  const docDir = docPath.substring(0, docPath.lastIndexOf("/"));
+  for (const child of tree.children) {
+    if (isRecord(child)) {
+      if (child.tagName === "img" && isRecord(child.properties)) {
+        const src = child.properties.src;
+        if (typeof src === "string" && src !== "" && !hasScheme(src)) {
+          child.properties.src = toAssetUrl(resolvePath(docDir, src));
+        }
+      }
+      resolveImageSources(child, docPath);
+    }
+  }
+}
+
+function hasScheme(url: string): boolean {
+  return /^(https?:|data:|asset:|mailto:|\/\/)/.test(url);
+}
+
+/**
+ * Converts an absolute path to an asset-protocol URL. Runs inside the render
+ * memo, so a failure must never escape: without the Tauri asset bridge the
+ * conversion throws, and letting it propagate would fail the WHOLE document
+ * render over a single image. Leaving the path untouched degrades to a broken
+ * image instead.
+ */
+function toAssetUrl(path: string): string {
+  try {
+    return convertFileSrc(path);
+  } catch {
+    return path;
+  }
+}
+
+function resolvePath(dir: string, relative: string): string {
+  if (relative.startsWith("/")) {
+    return relative;
+  }
+  const parts = dir.split("/");
+  const segments = relative.split("/");
+  for (const segment of segments) {
+    if (segment === "..") {
+      parts.pop();
+    } else if (segment !== ".") {
+      parts.push(segment);
+    }
+  }
+  return parts.join("/");
+}
 
 interface FocusUnit {
   readonly element: HTMLElement;
@@ -586,6 +644,7 @@ function ReaderPane(api: ExtensionApi) {
         return null;
       }
       const hast = renderer.runSync(astCache.get(document));
+      resolveImageSources(hast, document.path);
       if (bionicReading) {
         applyBionicReading(hast, false);
       }
@@ -922,7 +981,7 @@ function ReaderPane(api: ExtensionApi) {
       buildCache();
       updateFocus();
 
-      const observer = new ResizeObserver(() => {
+      const resizeObserver = new ResizeObserver(() => {
         const savedIndex = focusedIndex;
         buildCache();
         if (savedIndex >= 0 && savedIndex < units.length) {
@@ -932,13 +991,40 @@ function ReaderPane(api: ExtensionApi) {
           updateFocus();
         }
       });
-      observer.observe(container);
+      resizeObserver.observe(container);
+
+      // Rebuild cache when elements are replaced (e.g. syntax highlighting
+      // swaps plain <pre> with shiki-highlighted <pre>). ResizeObserver
+      // won't fire if replacement is same size. Coalesced via rAF to avoid
+      // repeated forced layout when idle-sliced highlighter replaces blocks
+      // one per slice.
+      let rafHandle = 0;
+      const scheduleCacheRebuild = (): void => {
+        if (rafHandle !== 0) return;
+        rafHandle = requestAnimationFrame(() => {
+          rafHandle = 0;
+          const savedIndex = focusedIndex;
+          buildCache();
+          if (savedIndex >= 0 && savedIndex < units.length) {
+            setFocusClasses(savedIndex);
+          } else {
+            focusedIndex = -1;
+            updateFocus();
+          }
+        });
+      };
+      const mutationObserver = new MutationObserver(scheduleCacheRebuild);
+      mutationObserver.observe(container, { childList: true, subtree: true });
 
       scrollParent.addEventListener("scroll", updateFocus, { passive: true });
       container.addEventListener("click", handleClick);
 
       return () => {
-        observer.disconnect();
+        resizeObserver.disconnect();
+        mutationObserver.disconnect();
+        if (rafHandle !== 0) {
+          cancelAnimationFrame(rafHandle);
+        }
         scrollParent.removeEventListener("scroll", updateFocus);
         container.removeEventListener("click", handleClick);
         setKeyHandler(null);

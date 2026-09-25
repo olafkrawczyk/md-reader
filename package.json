@@ -23,8 +23,7 @@
     "install:app": "bash scripts/install-app.sh",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test:focus": "node tests/focus-mode.mjs",
-    "test:ui": "node tests/reading-settings.mjs",
+    "test:focus": "node tests/focus-mode.mjs",    "test:ui": "node tests/reading-settings.mjs",
     "test:safety": "node tests/document-safety.mjs",
     "test:ticks": "node tests/task-ticks.mjs",
     "test:naming": "node tests/file-naming.mjs",
@@ -36,7 +35,13 @@
     "test:highlighting": "node tests/code-highlighting.mjs",
     "test:cache": "node tests/highlight-cache.mjs",
     "test:menu": "node tests/menu-actions.mjs",
-    "test:webkit": "node tests/webkit-apis.mjs"
+    "test:webkit": "node tests/webkit-apis.mjs",
+    "test:session": "node tests/session-restore.mjs",
+    "test:images": "node tests/image-sources.mjs",
+    "test:images:ui": "node tests/image-render.mjs",
+    "test:focus:code": "node tests/focus-code-highlight.mjs",
+    "test:quickopen": "node tests/quick-open.mjs",
+    "test:quickopen:ui": "node tests/quick-open-ui.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

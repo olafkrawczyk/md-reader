@@ -21,6 +21,7 @@ import { tabs } from "../tabs/tabStore";
 import { onCliOpen, takePendingCliOpen } from "../workspace/cliOpen";
 import type { CliOpen } from "../workspace/cliOpen";
 import type { AppShellAction, StatusMessage } from "./appShellReducer";
+import { serialize, deserialize } from "./session";
 
 /**
  * Top-level shell effects (react-state-architecture: effects hoisted toward
@@ -153,9 +154,14 @@ export function useExtensionActivation(
         return takePendingCliOpen();
       })
       .then((pending) => {
-        if (!cancelled && pending !== null && pending !== undefined) {
+        if (!cancelled && pending != null) {
           return openFromCli(api, pending).catch((err: unknown) => {
             showError(dispatch, err);
+          });
+        } else if (!cancelled) {
+          // No CLI open: restore session.
+          restoreSession(api).catch((err: unknown) => {
+            console.error("session restore failed", err);
           });
         }
       })
@@ -168,6 +174,27 @@ export function useExtensionActivation(
       cancelled = true;
     };
   }, [runtime, api, dispatch]);
+}
+
+async function restoreSession(api: ExtensionApi): Promise<void> {
+  const raw = api.settingsValues.get("session", "state");
+  const json = typeof raw === "string" ? raw : null;
+  const state = deserialize(json);
+  if (state === null) {
+    return;
+  }
+  await api.workspace.openFolder(state.workspaceRoot);
+  for (const path of state.tabPaths) {
+    try {
+      await tabs.open(path);
+    } catch {
+      // Missing or unreadable files skip silently.
+    }
+  }
+  const activePath = state.tabPaths[state.activeIndex];
+  if (activePath !== undefined && tabs.paths.includes(activePath)) {
+    await tabs.activate(activePath);
+  }
 }
 
 /** A second `md-reader <path>` invocation forwards the path here while the
@@ -259,6 +286,11 @@ export function useGlobalShortcuts(
     // Global keymap — keep ShortcutsPanel.tsx in sync when a binding changes.
     function onKeyDown(event: KeyboardEvent): void {
       const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key === "p") {
+        event.preventDefault();
+        dispatch({ type: "quickOpenOpened" });
+        return;
+      }
       if (mod && event.key === "s") {
         event.preventDefault();
         api.router.active
@@ -353,4 +385,46 @@ export function useSidebarResize(
       window.removeEventListener("mouseup", onUp);
     };
   }, [resizing, dispatch]);
+}
+
+/** Persist session (workspace + tabs) on change, debounced 500ms. */
+export function useSessionPersist(api: ExtensionApi): void {
+  const timerRef = useRef<number | null>(null);
+  const lastRootRef = useRef<string | null>(null);
+  useEffect(() => {
+    const persist = (): void => {
+      const json = serialize(
+        api.workspace.root,
+        tabs.paths,
+        tabs.activePath,
+      );
+      if (json !== null) {
+        api.settingsValues.set("session", "state", json);
+      }
+      lastRootRef.current = api.workspace.root;
+    };
+    const debouncedPersist = (): void => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        persist();
+      }, 500);
+    };
+    const checkRoot = (): void => {
+      if (api.workspace.root !== lastRootRef.current) {
+        debouncedPersist();
+      }
+    };
+    const unsubscribeTabs = tabs.subscribe(debouncedPersist);
+    const unsubscribeDoc = api.workspace.onDocumentOpened(checkRoot);
+    return () => {
+      unsubscribeTabs();
+      unsubscribeDoc();
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, [api]);
 }

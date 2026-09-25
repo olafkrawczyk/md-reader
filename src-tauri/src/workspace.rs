@@ -261,6 +261,12 @@ pub fn activate_workspace(
     });
     crate::recents::record(&canonical.to_string_lossy());
     crate::menu::refresh_recents(&app);
+
+    // Grant asset protocol access to workspace directory for image rendering.
+    app.asset_protocol_scope()
+        .allow_directory(&canonical, true)
+        .map_err(|err| format!("cannot grant asset access: {err}"))?;
+
     Ok(())
 }
 

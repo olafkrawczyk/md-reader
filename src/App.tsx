@@ -12,12 +12,14 @@ import {
   useGlobalShortcuts,
   useSidebarResize,
   useWindowCloseGuard,
+  useSessionPersist,
 } from "./core/state/appShellHooks";
 import { CloseGuardDialog } from "./core/safety";
 import { registerMenuAction } from "./core/menu/menuActions";
 import { useStoreSelection, useStoreValue } from "./core/state/storeHooks";
 import { SettingsPanel } from "./core/settings/SettingsPanel";
 import { ShortcutsPanel } from "./core/settings/ShortcutsPanel";
+import { QuickOpen } from "./core/ui/QuickOpen";
 import { QuietButton } from "./core/ui/controls";
 import { FolderOpenIcon, SettingsIcon, SidebarIcon } from "./core/ui/icons";
 import { tabs } from "./core/tabs/tabStore";
@@ -58,6 +60,7 @@ function App(): JSX.Element {
   useWindowCloseGuard(api);
   useGlobalShortcuts(api, dispatch);
   useSidebarResize(shell.sidebar.resizing, dispatch);
+  useSessionPersist(api);
 
   // External stores via subscription hooks; chrome UI state via the shell
   // reducer. No mirroring effects.
@@ -86,6 +89,7 @@ function App(): JSX.Element {
   const openSettings = useCallback(() => dispatch({ type: "settingsOpened" }), [dispatch]);
   const closeSettings = useCallback(() => dispatch({ type: "settingsClosed" }), [dispatch]);
   const closeShortcuts = useCallback(() => dispatch({ type: "shortcutsClosed" }), [dispatch]);
+  const closeQuickOpen = useCallback(() => dispatch({ type: "quickOpenClosed" }), [dispatch]);
 
   const handleOpenFolder = useCallback(() => {
     open({ directory: true, multiple: false })
@@ -321,6 +325,11 @@ function App(): JSX.Element {
       <ShortcutsPanel
         open={shell.shortcutsOpen}
         onClose={closeShortcuts}
+      />
+      <QuickOpen
+        api={api}
+        open={shell.quickOpenOpen}
+        onClose={closeQuickOpen}
       />
       <CloseGuardDialog />
       {api.ui.bySlot("overlay").map((contribution) => (
