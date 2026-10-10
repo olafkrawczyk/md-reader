@@ -1,6 +1,6 @@
 [package]
 name = "md-reader"
-version = "0.1.0"
+version = "0.2.0"
 description = "Markdown reader with an extension platform"
 edition = "2021"
 

@@ -3,6 +3,7 @@ dist/
 src-tauri/target/
 src-tauri/gen/schemas/
 .DS_Store
+*.tsbuildinfo
 
 # Secrets and local environment
 .env

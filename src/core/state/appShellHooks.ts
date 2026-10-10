@@ -18,6 +18,7 @@ import type { ExplorerUiController } from "../explorer/explorerActions";
 import { documentModeKey } from "../modes/documentModes";
 import type { DocumentModeController } from "../modes/documentModes";
 import { tabs } from "../tabs/tabStore";
+import { getFocusedPaneId } from "../panes/paneHost";
 import { onCliOpen, takePendingCliOpen } from "../workspace/cliOpen";
 import type { CliOpen } from "../workspace/cliOpen";
 import type { AppShellAction, StatusMessage } from "./appShellReducer";
@@ -286,6 +287,15 @@ export function useGlobalShortcuts(
     // Global keymap — keep ShortcutsPanel.tsx in sync when a binding changes.
     function onKeyDown(event: KeyboardEvent): void {
       const mod = event.metaKey || event.ctrlKey;
+      if (mod && !event.shiftKey && !event.altKey && (event.key === "a" || event.key === "A")) {
+        // Text inputs and CodeMirror keep their native select-all.
+        if (isEditableTarget(event.target)) {
+          return;
+        }
+        event.preventDefault();
+        selectActiveDocument();
+        return;
+      }
       if (mod && event.key === "p") {
         event.preventDefault();
         dispatch({ type: "quickOpenOpened" });
@@ -427,4 +437,47 @@ export function useSessionPersist(api: ExtensionApi): void {
       }
     };
   }, [api]);
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable
+  );
+}
+
+/**
+ * Select-all scoped to the document: prefers the focused pane, then falls
+ * back to the first rendered document so ⌘A never highlights app chrome.
+ */
+function selectActiveDocument(): void {
+  const focusedId = getFocusedPaneId();
+  const focusedPane =
+    focusedId === null
+      ? null
+      : window.document.querySelector<HTMLElement>(`[data-pane-id="${CSS.escape(focusedId)}"]`);
+  const target =
+    focusedPane?.querySelector<HTMLElement>(".mdr-reader, .mdr-editor .cm-content") ??
+    window.document.querySelector<HTMLElement>(".mdr-reader, .mdr-editor .cm-content");
+  if (target === null) {
+    return;
+  }
+  if (target.isContentEditable) {
+    // CodeMirror: focusing it lets its own keymap own subsequent edits;
+    // a DOM range over its content maps onto its selection model.
+    target.focus();
+  }
+  const selection = window.getSelection();
+  if (selection === null) {
+    return;
+  }
+  const range = window.document.createRange();
+  range.selectNodeContents(target);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }

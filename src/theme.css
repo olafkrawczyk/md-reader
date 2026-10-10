@@ -109,6 +109,18 @@ body {
   color: var(--mdr-color-fg);
   background: var(--mdr-color-bg);
   overflow: hidden;
+  /* App chrome is not selectable; only documents and form fields are, so
+     select-all (menu or ⌘A) never highlights the UI. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mdr-reader,
+.mdr-editor,
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 body.mdr-dragging {

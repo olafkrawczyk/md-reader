@@ -20,6 +20,7 @@ const SHORTCUTS: readonly ShortcutEntry[] = [
   { keys: "⌘E", action: "Toggle Reader / Editor" },
   { keys: "⌥⌘E", action: "Toggle Side-by-Side Split" },
   { keys: "⌘F", action: "Find in Document" },
+  { keys: "⌘A", action: "Select All in Document" },
   { keys: "⌘N", action: "New File" },
   { keys: "⌘⇧N", action: "New Folder" },
   { keys: "⌘← / ⌘→", action: "Previous / Next Tab" },
