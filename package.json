@@ -1,7 +1,7 @@
 {
   "name": "md-reader",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A calm, native macOS markdown reader for notes, docs, and knowledge bases.",
   "license": "MIT",
   "author": "Olaf Krawczyk",
