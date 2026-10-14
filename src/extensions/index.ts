@@ -14,6 +14,7 @@ import { fileManagementExtension } from "./fileManagement";
 import { outlineExtension } from "./outline";
 import { linksExtension } from "./links";
 import { workspaceSearchExtension } from "./workspaceSearch";
+import { updaterExtension } from "./updater";
 
 /**
  * The built-in pack, in activation order. @mdr/markdown claims the
@@ -37,4 +38,5 @@ export const builtinExtensions: readonly ExtensionDescriptor[] = [
   workspaceSearchExtension,
   searchExtension,
   documentSafetyExtension,
+  updaterExtension,
 ];

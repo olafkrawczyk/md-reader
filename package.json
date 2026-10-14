@@ -1,7 +1,7 @@
 {
   "name": "md-reader",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A calm, native macOS markdown reader for notes, docs, and knowledge bases.",
   "license": "MIT",
   "author": "Olaf Krawczyk",
@@ -23,7 +23,8 @@
     "install:app": "bash scripts/install-app.sh",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test:focus": "node tests/focus-mode.mjs",    "test:ui": "node tests/reading-settings.mjs",
+    "test:focus": "node tests/focus-mode.mjs",
+    "test:ui": "node tests/reading-settings.mjs",
     "test:safety": "node tests/document-safety.mjs",
     "test:ticks": "node tests/task-ticks.mjs",
     "test:naming": "node tests/file-naming.mjs",
@@ -41,7 +42,8 @@
     "test:images:ui": "node tests/image-render.mjs",
     "test:focus:code": "node tests/focus-code-highlight.mjs",
     "test:quickopen": "node tests/quick-open.mjs",
-    "test:quickopen:ui": "node tests/quick-open-ui.mjs"
+    "test:quickopen:ui": "node tests/quick-open-ui.mjs",
+    "test:updates": "node tests/updates-and-dblclick.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -57,6 +59,8 @@
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-opener": "^2.5.5",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.13.3",
     "lucide-react": "^1.40.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

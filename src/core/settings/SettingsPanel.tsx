@@ -1,5 +1,6 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import type { ExtensionApi } from "../extension/api";
 import type { SettingSchemaEntry } from "../extension/contributionRegistries";
 import { useStoreValue } from "../state/storeHooks";
@@ -99,6 +100,12 @@ const EntryControl = memo(function EntryControl({
  */
 export function SettingsPanel({ api, open, onClose }: SettingsPanelProps): JSX.Element {
   const contributions = api.settings.all();
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion().then(setVersion, (error: unknown) => {
+      console.warn("Could not read app version", error);
+    });
+  }, []);
   return (
     <ModalSheet open={open} title="Settings" onClose={onClose}>
       {contributions.map((contribution) => (
@@ -121,6 +128,7 @@ export function SettingsPanel({ api, open, onClose }: SettingsPanelProps): JSX.E
           </div>
         </section>
       ))}
+      <p className="mdr-settings-version">md-reader {version ?? "…"}</p>
     </ModalSheet>
   );
 }

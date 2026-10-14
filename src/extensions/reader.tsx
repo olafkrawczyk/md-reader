@@ -1134,6 +1134,15 @@ function ReaderPane(api: ExtensionApi) {
         <div
           className="mdr-reader"
           ref={containerRef}
+          onDoubleClick={(event) => {
+            // Reading-only preset: in split/research the editor is already visible.
+            if (
+              api.layout.activePresetId === "read" &&
+              !(event.target instanceof Element && event.target.closest("a, input, button"))
+            ) {
+              api.layout.setPreset("edit");
+            }
+          }}
           dangerouslySetInnerHTML={{ __html: html ?? "" }}
         />
       ),

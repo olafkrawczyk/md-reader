@@ -1723,3 +1723,35 @@ nav.mdr-explorer[data-drop="true"] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.mdr-settings-version {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--mdr-color-fg-muted);
+  text-align: center;
+}
+
+.mdr-update-notice {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  font-size: 13px;
+  color: var(--mdr-color-fg);
+  background: var(--mdr-color-bg-elevated);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.mdr-update-dismiss {
+  border: none;
+  background: none;
+  font-size: 16px;
+  color: var(--mdr-color-fg-muted);
+  cursor: pointer;
+}
