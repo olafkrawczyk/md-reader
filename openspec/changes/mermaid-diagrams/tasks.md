@@ -45,7 +45,7 @@
 **Interfaces:**
 - Produces: `budgetedLru(maxChars: number, maxEntryChars = maxChars / 4): { get(key: string): string | undefined; set(key: string, value: string): void }` exported from `src/core/budgetedMemo.ts`. `get` touches (LRU). `set` of an outsized entry is a no-op. `budgetedMemo` keeps its exact signature and behavior.
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/highlight-cache.mjs`, importing `budgetedLru` too)
+- [x] **Step 1: Write the failing tests** (append to `tests/highlight-cache.mjs`, importing `budgetedLru` too)
 
 ```js
 {
@@ -69,10 +69,10 @@
 }
 ```
 
-- [ ] **Step 2: Run** `npm run test:cache` — Expected: FAIL (`budgetedLru` is not exported).
-- [ ] **Step 3: Implement `budgetedLru`** in `src/core/budgetedMemo.ts`, then reimplement `budgetedMemo` as a thin wrapper (store `null` results under an internal sentinel string so the LRU stays `string`-valued). Keep the file dependency-free.
-- [ ] **Step 4: Run** `npm run test:cache` and `npm run test:highlighting` — Expected: all pass.
-- [ ] **Step 5: Commit** `refactor(core): extract budgetedLru beneath budgetedMemo`
+- [x] **Step 2: Run** `npm run test:cache` — Expected: FAIL (`budgetedLru` is not exported).
+- [x] **Step 3: Implement `budgetedLru`** in `src/core/budgetedMemo.ts`, then reimplement `budgetedMemo` as a thin wrapper (store `null` results under an internal sentinel string so the LRU stays `string`-valued). Keep the file dependency-free.
+- [x] **Step 4: Run** `npm run test:cache` and `npm run test:highlighting` — Expected: all pass.
+- [x] **Step 5: Commit** `refactor(core): extract budgetedLru beneath budgetedMemo`
 
 ---
 
@@ -94,7 +94,7 @@ Dependency-free logic used by the editor and the service: info matching, tokeniz
   - `mermaidErrorLine(error: unknown): number | null` — 1-based line within the diagram: `error.hash.loc.first_line` → `error.hash.line + 1` → `/line (\d+)/i` on `String(error.message)` → `null`.
   - `mermaidErrorMessage(error: unknown): string` — first non-empty line of the message, trimmed; `"Unknown error"` fallback.
 
-- [ ] **Step 1: Write the failing tests** in `tests/mermaid-syntax.mjs` (node assert; `StringStream` from `@codemirror/language` works in plain node)
+- [x] **Step 1: Write the failing tests** in `tests/mermaid-syntax.mjs` (node assert; `StringStream` from `@codemirror/language` works in plain node)
 
 ```js
 import { StringStream } from "@codemirror/language";
@@ -134,10 +134,10 @@ assert.equal(mermaidErrorMessage(new Error("\n  Parse error on line 3:\n...A--\n
 assert.equal(mermaidErrorMessage(undefined), "Unknown error");
 ```
 
-- [ ] **Step 2: Run** `npm run test:mermaid:syntax` — Expected: FAIL (module not found).
-- [ ] **Step 3: Implement** `src/extensions/mermaidSyntax.ts` per the Interfaces and design.md D3/D4. Tokenizer order per position: `%%` comment to EOL → `"…"` string → bracketed label (`[`…`]`, `(`…`)`, `{`…`}` when preceded by an identifier) → arrow regex (longest match first; include every arrow in D3 plus `-.->`, `--x`, `--o`, `o--`, `*--`, `..>`, `}|..|{`-style ER cardinalities) → number → word (keyword if in a `Set` of the D3 header + structural keywords) → advance one char.
-- [ ] **Step 4: Run** `npm run test:mermaid:syntax` — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(mermaid): pure syntax helpers — tokenizer, templates, error parsing`
+- [x] **Step 2: Run** `npm run test:mermaid:syntax` — Expected: FAIL (module not found).
+- [x] **Step 3: Implement** `src/extensions/mermaidSyntax.ts` per the Interfaces and design.md D3/D4. Tokenizer order per position: `%%` comment to EOL → `"…"` string → bracketed label (`[`…`]`, `(`…`)`, `{`…`}` when preceded by an identifier) → arrow regex (longest match first; include every arrow in D3 plus `-.->`, `--x`, `--o`, `o--`, `*--`, `..>`, `}|..|{`-style ER cardinalities) → number → word (keyword if in a `Set` of the D3 header + structural keywords) → advance one char.
+- [x] **Step 4: Run** `npm run test:mermaid:syntax` — Expected: PASS.
+- [x] **Step 5: Commit** `feat(mermaid): pure syntax helpers — tokenizer, templates, error parsing`
 
 ---
 
@@ -183,7 +183,7 @@ assert.equal(mermaidErrorMessage(undefined), "Unknown error");
   ```
   Behaviour: one memoized `load()` promise; on rejection, `render` resolves `{ error: "Mermaid failed to load" }` forever, `isLoaded()` stays false, no retry. `initialize` is called before the first render and again only when appearance changes (config per Global Constraints). All `render`/`parse` calls run through one promise-chain queue; a rejecting call must not stall the queue. Cache key `` `${appearance}\0${source}` `` in a `budgetedLru(4_000_000)`, values encoded `"S"+svg` / `"E"+message`. Render ids `mdr-mermaid-${n}`; `removeTemp(id)` runs after every render, success or failure. `parse` returns `null` immediately if not loaded (never calls `load`), else `null` on success or `{ line: mermaidErrorLine(e), message: mermaidErrorMessage(e) }`.
 
-- [ ] **Step 1: Write the failing tests** in `tests/mermaid-service.mjs` with a fake `MermaidLike` that records calls, can be told to fail on a source, and resolves renders with `<svg>${theme}:${text}</svg>`:
+- [x] **Step 1: Write the failing tests** in `tests/mermaid-service.mjs` with a fake `MermaidLike` that records calls, can be told to fail on a source, and resolves renders with `<svg>${theme}:${text}</svg>`:
 
 ```js
 // lazy: no load until render/preload
@@ -225,10 +225,10 @@ assert.equal(await svc.parse("ok"), null);
 // (fresh service whose load rejects) → render → { error: "Mermaid failed to load" }, loads() === 1 after two renders, isLoaded() false
 ```
 
-- [ ] **Step 2: Run** `npm run test:mermaid:service` — Expected: FAIL (module not found).
-- [ ] **Step 3: Implement** `createMermaidService` and the contract types. Then `npm install mermaid@^12.2.0 @codemirror/lint@^6.9.7`, and write `mermaid.ts`: `activate` registers `createMermaidService({ load: () => import("mermaid").then((m) => m.default), removeTemp: (id) => { document.getElementById(id)?.remove(); document.getElementById(`d${id}`)?.remove(); } })` under `renderMermaidKey`; manifest `{ id: "@mdr/mermaid", displayName: "Mermaid diagrams", version: "0.1.0" }`. Register in `index.ts`.
-- [ ] **Step 4: Run** `npm run test:mermaid:service && npm run typecheck && npm run lint` — Expected: PASS, no errors.
-- [ ] **Step 5: Commit** `feat(mermaid): lazily loaded render service`
+- [x] **Step 2: Run** `npm run test:mermaid:service` — Expected: FAIL (module not found).
+- [x] **Step 3: Implement** `createMermaidService` and the contract types. Then `npm install mermaid@^12.2.0 @codemirror/lint@^6.9.7`, and write `mermaid.ts`: `activate` registers `createMermaidService({ load: () => import("mermaid").then((m) => m.default), removeTemp: (id) => { document.getElementById(id)?.remove(); document.getElementById(`d${id}`)?.remove(); } })` under `renderMermaidKey`; manifest `{ id: "@mdr/mermaid", displayName: "Mermaid diagrams", version: "0.1.0" }`. Register in `index.ts`.
+- [x] **Step 4: Run** `npm run test:mermaid:service && npm run typecheck && npm run lint` — Expected: PASS, no errors.
+- [x] **Step 5: Commit** `feat(mermaid): lazily loaded render service`
 
 ---
 
@@ -245,7 +245,7 @@ assert.equal(await svc.parse("ok"), null);
 - Consumes: `renderMermaidKey`, `RenderMermaid`, `Appearance` (Task 3); `isMermaidInfo` (Task 2); `effectiveAppearance`, `subscribeAppearance` (`src/core/theme/appearance.ts`).
 - Produces (DOM contract used by tests and focus mode): `<figure class="mdr-mermaid">` containing the `<svg>`, carrying `data-line`, `data-focus-unit`, `is-focused` copied from the replaced `<pre>`; stale state `data-stale` on the figure; error `<figcaption class="mdr-mermaid-error">Mermaid: …</figcaption>` placed right after the `<pre>` (or inside the stale figure).
 
-- [ ] **Step 1: Write the failing Playwright tests** in `tests/mermaid-render.mjs`. Fixtures (in-memory folder): `one.md` (heading + valid `flowchart TD; A-->B`), `bad.md` (`flowchart TD\n  A -->`), `xss.md` (`flowchart TD\n  A["<script>window.__pwned=1</script>"] --> B["<img src=x onerror=window.__pwned=1>"]`), `long.md` (valid diagram, 400 paragraphs, valid diagram), `dupes.md` (same diagram twice + a ```` ```Mermaid ```` fence + an empty ```` ```mermaid ```` fence), `wide.md` (flowchart LR with 40 chained nodes), `plain.md` (no diagram). Checks:
+- [x] **Step 1: Write the failing Playwright tests** in `tests/mermaid-render.mjs`. Fixtures (in-memory folder): `one.md` (heading + valid `flowchart TD; A-->B`), `bad.md` (`flowchart TD\n  A -->`), `xss.md` (`flowchart TD\n  A["<script>window.__pwned=1</script>"] --> B["<img src=x onerror=window.__pwned=1>"]`), `long.md` (valid diagram, 400 paragraphs, valid diagram), `dupes.md` (same diagram twice + a ```` ```Mermaid ```` fence + an empty ```` ```mermaid ```` fence), `wide.md` (flowchart LR with 40 chained nodes), `plain.md` (no diagram). Checks:
   - `"valid diagram renders as svg"`: open `one.md`; `.mdr-mermaid svg` appears within 10 s; `pre code.language-mermaid` count is 0; figure has a `data-line` attribute.
   - `"document paints before the diagram"`: immediately after clicking `one.md`, the heading text is visible while `.mdr-mermaid` count is 0 or the `<pre>` is present (poll the first frame via `page.evaluate` in a `requestAnimationFrame`).
   - `"invalid diagram keeps source with caption"`: `bad.md` → `pre code.language-mermaid` still present; `.mdr-mermaid-error` text starts with `Mermaid:`.
@@ -258,8 +258,8 @@ assert.equal(await svc.parse("ok"), null);
   - `"broken while editing shows stale render"`: in split view on `two.md`, type ` -->` (dangling) into the first diagram; within 1.5 s the first figure has `data-stale` and a `.mdr-mermaid-error`; delete it; `data-stale` disappears.
   - `"switching documents mid-render"`: open `long.md`, immediately open `plain.md`; after 2 s `plain.md`'s reader contains no `.mdr-mermaid`.
   - `"plain document never loads mermaid"` lives in Task 5.
-- [ ] **Step 2: Run** `npm run test:mermaid` — Expected: FAIL (no `.mdr-mermaid`).
-- [ ] **Step 3: Implement** the reader pass per design.md D2 with these specifics:
+- [x] **Step 2: Run** `npm run test:mermaid` — Expected: FAIL (no `.mdr-mermaid`).
+- [x] **Step 3: Implement** the reader pass per design.md D2 with these specifics:
   - `const appearance = useSyncExternalStore(subscribeAppearance, effectiveAppearance)`.
   - Block selection: `pre > code[class*='language-']` filtered by `isMermaidInfo(lang)`; apply the same filter (negated) to the Shiki `pending` list.
   - A per-pane `useRef<Map<number, string>>` of last good svg by block index, cleared when `document.path` changes; a `useRef` holding the previous `html`'s document path to tell "edit" (same path, html changed → debounce 300 ms) from "open/appearance" (no debounce).
@@ -267,8 +267,8 @@ assert.equal(await svc.parse("ok"), null);
   - Then `IntersectionObserver({ root: container's scroll parent, rootMargin: "100% 0px" })`; entering blocks are unobserved and pushed to a FIFO drained one `await render()` at a time; each awaited result is applied only if `!cancelled` and the target `<pre>` is still connected.
   - Cleanup: `cancelled = true`, disconnect observer, clear debounce timer.
   - SVG insertion uses a `<template>` as the Shiki pass does.
-- [ ] **Step 4: Run** `npm run test:mermaid`, then the regression suites that touch the reader DOM: `npm run test:highlighting && npm run test:focus:code && npm run test:focus && npm run test:outline && npm run test:search` — Expected: all PASS.
-- [ ] **Step 5: Commit** `feat(reader): render mermaid diagrams post-paint, lazily per viewport`
+- [x] **Step 4: Run** `npm run test:mermaid`, then the regression suites that touch the reader DOM: `npm run test:highlighting && npm run test:focus:code && npm run test:focus && npm run test:outline && npm run test:search` — Expected: all PASS.
+- [x] **Step 5: Commit** `feat(reader): render mermaid diagrams post-paint, lazily per viewport`
 
 ---
 
@@ -281,12 +281,12 @@ assert.equal(await svc.parse("ok"), null);
 **Interfaces:**
 - Consumes: the running app (Tasks 3–4); `vite build --manifest`.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
   - `"plain document never loads mermaid"`: record `page.on("request")` URLs; open folder, open `plain.md`, switch to Writing (⌘E) and type a character outside any fence, wait 2 s; assert no URL matches `/mermaid/i` except our own `src/extensions/mermaid*.ts` modules (match `/node_modules\/.*mermaid|\.vite\/deps\/mermaid/`).
   - `"diagram document loads mermaid"`: open `one.md`; assert such a request happens (proves the matcher is live).
   - `"mermaid is not in the startup graph"`: run `node node_modules/vite/bin/vite.js build --manifest --outDir <tmpdir>`; read `<tmpdir>/.vite/manifest.json`; walk the entry's static `imports` transitively; assert no visited chunk key/file matches `/node_modules\/mermaid/`, and that some entry reachable via `dynamicImports` does.
-- [ ] **Step 2: Run** `npm run test:mermaid:lazy` — Expected: PASS (Tasks 3–4 already built this; if it fails, the defect is in Task 3/4 — fix there, not in the test).
-- [ ] **Step 3: Commit** `test(mermaid): pin lazy-loading guarantees`
+- [x] **Step 2: Run** `npm run test:mermaid:lazy` — Expected: PASS (Tasks 3–4 already built this; if it fails, the defect is in Task 3/4 — fix there, not in the test).
+- [x] **Step 3: Commit** `test(mermaid): pin lazy-loading guarantees`
 
 ---
 
@@ -307,16 +307,16 @@ assert.equal(await svc.parse("ok"), null);
   - `mermaidTemplateCompletion: CompletionSource` — uses `fenceOpenerPrefix(lineTextBeforeCursor, countOfFenceLinesBeforeThisLine)`; each option `{ label, type: "text", apply: snippet("```mermaid\n" + body + "\n```") }`, `from` = start of the backticks.
 - Changes `createWikilinkCompletion(getLinkIndex, extraSources: readonly CompletionSource[] = [])` so both sources share the one `autocompletion({ override: [...] })` (CodeMirror allows only one `autocompletion` config to win).
 
-- [ ] **Step 1: Write the failing Playwright tests** in `tests/mermaid-editor.mjs` (fixture `diag.md` containing a flowchart fence with `flowchart TD`, `A["Start"] --> B`, `%% note`):
+- [x] **Step 1: Write the failing Playwright tests** in `tests/mermaid-editor.mjs` (fixture `diag.md` containing a flowchart fence with `flowchart TD`, `A["Start"] --> B`, `%% note`):
   - `"mermaid fence is highlighted in the editor"`: open `diag.md`, ⌘E; in `.cm-content`, the span with text `flowchart` has a computed color different from a plain-text span's; same for `-->`, `"Start"`, `%% note`. (Compare against the color of a word in a normal paragraph line.)
   - `"other fences stay unhighlighted"`: a ```` ```js ```` fence's `const` has the plain-text color.
   - `"typing a fence offers templates"`: on a new empty line after the last fence, type ```` ```mer ````; `.cm-tooltip-autocomplete` lists exactly the 8 labels; press Enter on `mermaid · sequence`; the document text contains "```mermaid\nsequenceDiagram" and a closing "```" line.
   - `"closing fence offers no templates"`: inside an open ```` ```js ```` block, type ```` ``` ```` on its own line; no option labelled `mermaid ·` appears.
   - `"wikilink completion still works"`: type `[[` and see the existing wikilink options (regression guard for the shared `autocompletion`).
-- [ ] **Step 2: Run** `npm run test:mermaid:editor` — Expected: FAIL.
-- [ ] **Step 3: Implement** `mermaidEditor.ts` (highlight + templates only) and wire into `editor.tsx`/`links.tsx` per Interfaces.
-- [ ] **Step 4: Run** `npm run test:mermaid:editor && npm run test:editor && npm run test:wikilinks` — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(editor): mermaid highlighting and starter templates`
+- [x] **Step 2: Run** `npm run test:mermaid:editor` — Expected: FAIL.
+- [x] **Step 3: Implement** `mermaidEditor.ts` (highlight + templates only) and wire into `editor.tsx`/`links.tsx` per Interfaces.
+- [x] **Step 4: Run** `npm run test:mermaid:editor && npm run test:editor && npm run test:wikilinks` — Expected: PASS.
+- [x] **Step 5: Commit** `feat(editor): mermaid highlighting and starter templates`
 
 ---
 
@@ -334,15 +334,15 @@ assert.equal(await svc.parse("ok"), null);
   - `mermaidLinter(getService: () => RenderMermaid | null): Extension` — `linter(source, { delay: 500 })` per design.md D5. Walk `syntaxTree(state)` for `FencedCode` nodes whose `CodeInfo` child satisfies `isMermaidInfo`; body = lines between the fence lines; diagnostic range = the full mapped document line (`line - 1` offset from the first body line; `null` → first body line); `severity: "error"`, `message` = parse message. Also re-run lint when `service.onLoaded` fires (dispatch `forceLinting(view)`).
   - `mermaidPreloadOnEdit(getService: () => RenderMermaid | null): Extension` — an `EditorView.updateListener` that, the first time a doc change touches a range inside a mermaid `FencedCode` node, calls `getService()?.preload()`; then stops checking for that view.
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/mermaid-editor.mjs`):
+- [x] **Step 1: Write the failing tests** (append to `tests/mermaid-editor.mjs`):
   - `"opening in the editor does not load mermaid"`: record requests; open `diag.md` straight into Writing (⌘E before the reader renders is unreliable — instead set preset to Writing first, then open the file); wait 1.5 s; no `/node_modules\/.*mermaid|\.vite\/deps\/mermaid/` request.
   - `"edit inside a fence loads mermaid and marks the error line"`: continue; on the diagram's 3rd body line append ` -->` (dangling); within 3 s a `.cm-lintRange-error` exists whose `.cm-line` ancestor's text equals that edited line; hovering it shows a tooltip containing `Parse error` or `Parsing failed`.
   - `"fixing the line clears the marker"`: delete the appended text; within 2 s no `.cm-lintRange-error`.
   - `"valid diagram has no markers"`: on a fresh `diag.md`, edit a label inside the fence; after 2 s no `.cm-lintRange-error`.
-- [ ] **Step 2: Run** `npm run test:mermaid:editor` — Expected: the new checks FAIL.
-- [ ] **Step 3: Implement** `mermaidLinter`, `mermaidPreloadOnEdit`, wire into `editor.tsx`, add lint CSS.
-- [ ] **Step 4: Run** `npm run test:mermaid:editor && npm run test:editor && npm run test:safety` — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(editor): mermaid lint markers, load on first fence edit`
+- [x] **Step 2: Run** `npm run test:mermaid:editor` — Expected: the new checks FAIL.
+- [x] **Step 3: Implement** `mermaidLinter`, `mermaidPreloadOnEdit`, wire into `editor.tsx`, add lint CSS.
+- [x] **Step 4: Run** `npm run test:mermaid:editor && npm run test:editor && npm run test:safety` — Expected: PASS.
+- [x] **Step 5: Commit** `feat(editor): mermaid lint markers, load on first fence edit`
 
 ---
 
@@ -352,7 +352,7 @@ assert.equal(await svc.parse("ok"), null);
 - Modify: `openspec/changes/mermaid-diagrams/tasks.md` (tick boxes)
 - Modify: `sample/` — add `sample/mermaid.md` with one diagram of each template type (manual smoke file, matching how `sample/` is used)
 
-- [ ] **Step 1: Run** `npm run typecheck && npm run lint && npm run build` — Expected: no errors.
-- [ ] **Step 2: Run** every `test:*` script: `for s in $(node -p "Object.keys(require('./package.json').scripts).filter(k=>k.startsWith('test:')).join(' ')"); do npm run -s $s || echo "FAILED $s"; done` — Expected: no `FAILED` lines.
-- [ ] **Step 3: Manual smoke** with `npm run tauri dev`: open `sample/mermaid.md` in the real WKWebView; every diagram renders in light and dark; Split View editing feels responsive. Record anything WebKit-specific in design.md Risks.
-- [ ] **Step 4: Commit** `chore(mermaid): sample document and task checklist`
+- [x] **Step 1: Run** `npm run typecheck && npm run lint && npm run build` — Expected: no errors.
+- [x] **Step 2: Run** every `test:*` script: `for s in $(node -p "Object.keys(require('./package.json').scripts).filter(k=>k.startsWith('test:')).join(' ')"); do npm run -s $s || echo "FAILED $s"; done` — Expected: no `FAILED` lines.
+- [ ] **Step 3: Manual smoke** with `npm run tauri dev`: open `sample/mermaid.md` in the real WKWebView; every diagram renders in light and dark; Split View editing feels responsive. Record anything WebKit-specific in design.md Risks. (manual — handed to user)
+- [x] **Step 4: Commit** `chore(mermaid): sample document and task checklist`
