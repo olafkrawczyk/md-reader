@@ -186,11 +186,10 @@ check("typing a fence offers templates", async (page) => {
   await tooltip.locator("li", { hasText: "mermaid · sequence" }).click();
   const text = await page.locator(EDITOR).innerText();
   assert(/```mermaid\s*\n?\s*sequenceDiagram/.test(text), `no sequence template in: ${text}`);
-  const doc = await page.evaluate(() => document.querySelector(".mdr-editor .cm-content").cmView?.view?.state.doc.toString());
-  if (doc !== undefined) {
-    assert(doc.includes("```mermaid\nsequenceDiagram"), `bad doc: ${doc}`);
-    assert(/sequenceDiagram[\s\S]*\n```\s*$/.test(doc), `no closing fence: ${doc}`);
-  }
+  const lines = await page.locator(".mdr-editor .cm-line").allTextContents();
+  const opener = lines.findIndex((l, i) => l === "```mermaid" && lines[i + 1] === "sequenceDiagram");
+  assert(opener >= 0, `no mermaid opener followed by sequenceDiagram in: ${JSON.stringify(lines)}`);
+  assert(lines.slice(opener + 2).includes("```"), `no closing fence after template: ${JSON.stringify(lines)}`);
   const fences = await page.locator(".mdr-editor .cm-line", { hasText: /^```$/ }).count();
   assert(fences >= 3, `expected a closing fence line, saw ${fences}`);
 });

@@ -31,7 +31,9 @@ export const mermaidTemplateCompletion: CompletionSource = (
 ): CompletionResult | null => {
   const line = context.state.doc.lineAt(context.pos);
   const before = line.text.slice(0, context.pos - line.from);
-  if (!fenceOpenerPrefix(before, fencesBefore(context, line.number))) {
+  // Cheap line-prefix check first: the whole-document fence scan only runs
+  // when the line could be a fence opener (this source runs on every query).
+  if (!fenceOpenerPrefix(before, 0) || fencesBefore(context, line.number) % 2 !== 0) {
     return null;
   }
   return {
