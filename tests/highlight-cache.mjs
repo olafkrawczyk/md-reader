@@ -3,7 +3,7 @@
 // highlighting. Pure function, so no browser and no bundler: node strips the
 // types and runs the real source. `npm run test:cache`.
 import assert from "node:assert/strict";
-import { budgetedMemo } from "../src/core/budgetedMemo.ts";
+import { budgetedMemo, budgetedLru } from "../src/core/budgetedMemo.ts";
 
 // Sizes count key + value. Keys below are 2-3 chars ("k0".."k19"), values 10,
 // so an entry is ~12 chars and a 36-char budget holds 3. The LRU cases pass an
@@ -89,4 +89,29 @@ const ENTRY = 13; // 3-char key + 10-char value, the largest used below
   assert.ok(bigRecomputed, "outsized entry should not have been stored");
 }
 
-console.log("budgetedMemo: all checks passed");
+{
+  // budgetedLru: a miss is undefined and stores nothing.
+  const lru = budgetedLru(1000);
+  assert.equal(lru.get("a"), undefined, "a miss is undefined and stores nothing");
+  lru.set("a", "x");
+  assert.equal(lru.get("a"), "x");
+}
+
+{
+  // budgetedLru: get touches, so the touched entry survives the next eviction.
+  const lru = budgetedLru(36, ENTRY);
+  lru.set("k1", value(1)); lru.set("k2", value(1)); lru.set("k3", value(1));
+  lru.get("k1"); // touch
+  lru.set("k4", value(1)); // evicts k2
+  assert.equal(lru.get("k2"), undefined);
+  assert.equal(lru.get("k1"), value(1));
+}
+
+{
+  // budgetedLru: an outsized entry is a no-op, not a flush.
+  const lru = budgetedLru(100);
+  lru.set("big", "x".repeat(40));
+  assert.equal(lru.get("big"), undefined, "outsized entry is not stored");
+}
+
+console.log("budgetedMemo + budgetedLru: all checks passed");
