@@ -5,7 +5,8 @@ import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
 import { usePaneHost } from "../core/extension";
-import { highlightCodeKey, mdAstCacheKey, mdOutlineCacheKey } from "./markdownContract";
+import { highlightCodeKey, mdAstCacheKey, mdOutlineCacheKey, renderMermaidKey } from "./markdownContract";
+import { isMermaidCode, useMermaidDiagrams } from "./readerMermaid";
 import { swapTaskMarker } from "./taskTicks";
 import { useService, useStoreValue } from "../core/state/storeHooks";
 import type { Document } from "../core/workspace/document";
@@ -635,6 +636,7 @@ function ReaderPane(api: ExtensionApi) {
     const linkIndex = useService(api.services, linkIndexKey);
     const outlineCache = useService(api.services, mdOutlineCacheKey);
     const highlightCode = useService(api.services, highlightCodeKey);
+    const renderMermaid = useService(api.services, renderMermaidKey);
     const bionicReading = useSettingBoolean(api, "bionicReading", false);
     const focusMode = useSettingBoolean(api, "focusMode", false);
     const prevFocusModeRef = useRef(focusMode);
@@ -663,7 +665,9 @@ function ReaderPane(api: ExtensionApi) {
       }
       const pending = Array.from(
         container.querySelectorAll<HTMLElement>("pre > code[class*='language-']"),
-      ).filter((code) => code.closest("pre")?.classList.contains("shiki") !== true);
+      ).filter(
+        (code) => code.closest("pre")?.classList.contains("shiki") !== true && !isMermaidCode(code),
+      );
       if (pending.length === 0) {
         return;
       }
@@ -709,6 +713,9 @@ function ReaderPane(api: ExtensionApi) {
         idleCancel(handle);
       };
     }, [html, highlightCode]);
+
+    // Mermaid fences become diagrams post-paint, lazily per viewport.
+    useMermaidDiagrams(containerRef, html, document?.path ?? null, renderMermaid);
 
     // One search target per reader container, created lazily when the find
     // bar resolves against this pane; destroyed with the registration.

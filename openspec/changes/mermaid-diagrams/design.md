@@ -64,7 +64,7 @@ A second effect in `ReaderPane`, keyed on `[html, renderMermaid, appearance]`:
 6. **Errors:** on `{ error }`, the `<pre>` stays (or, if a previous render existed at the same block index during this editing session, that SVG is shown with `data-stale` dimming) and a `<figcaption class="mdr-mermaid-error">Mermaid: …</figcaption>` follows. "Last good render" is tracked per pane as `blockIndex → svg`, reset on document switch.
 7. The Shiki pass excludes `language-mermaid` from its `pending` list.
 
-Appearance is read via a small hook observing `data-appearance` (MutationObserver), so a theme switch re-runs the pass; toggling back is a cache hit.
+Appearance is read with `useSyncExternalStore(subscribeAppearance, effectiveAppearance)` (`src/core/theme/appearance.ts`), so a theme switch re-runs the pass; toggling back is a cache hit.
 
 ### D3: Editor — highlighting via `StreamLanguage`
 

@@ -35,6 +35,7 @@
     "test:editor": "node tests/editor-experience.mjs",
     "test:highlighting": "node tests/code-highlighting.mjs",
     "test:cache": "node tests/highlight-cache.mjs",
+    "test:mermaid": "node tests/mermaid-render.mjs",
     "test:mermaid:syntax": "node tests/mermaid-syntax.mjs",
     "test:mermaid:service": "node tests/mermaid-service.mjs",
     "test:menu": "node tests/menu-actions.mjs",

@@ -909,6 +909,32 @@ nav.mdr-explorer[data-drop="true"] {
   font-family: var(--mdr-font-mono);
 }
 
+/* Mermaid diagrams (design D6): centered, never wider than the measure —
+   a diagram too wide to scale down scrolls inside its own figure. */
+.mdr-reader .mdr-mermaid {
+  margin: 1em 0;
+  max-width: 100%;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.mdr-reader .mdr-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mdr-reader .mdr-mermaid[data-stale] svg {
+  opacity: 0.45;
+}
+
+.mdr-reader .mdr-mermaid-error {
+  margin-top: var(--mdr-space-1);
+  font-family: var(--mdr-font-ui);
+  font-size: 0.8em;
+  color: var(--mdr-color-fg-muted);
+  text-align: start;
+}
+
 /* Task ticks: the checkbox replaces the bullet — top-level task lists sit
  * flush with the content edge instead of reserving the (now empty) marker
  * gutter; nested lists cascade by one checkbox step. */
