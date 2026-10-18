@@ -162,7 +162,8 @@ export function fenceOpenerPrefix(lineBefore: string, openFencesBefore: number):
 
 /** 1-based line within the diagram where mermaid reports a parse error. */
 export function mermaidErrorLine(error: unknown): number | null {
-  const e = error as { hash?: { loc?: { first_line?: number }; line?: number }; message?: unknown } | null;
+  const e: { hash?: { loc?: { first_line?: number }; line?: number }; message?: unknown } | null =
+    typeof error === "object" ? error : null;
   const first = e?.hash?.loc?.first_line;
   if (typeof first === "number") return first;
   // hash.line is 0-based.
@@ -173,7 +174,7 @@ export function mermaidErrorLine(error: unknown): number | null {
 
 /** First non-empty line of mermaid's message, for the one-line caption. */
 export function mermaidErrorMessage(error: unknown): string {
-  const raw = (error as { message?: unknown } | null)?.message;
+  const raw = typeof error === "object" && error !== null && "message" in error ? error.message : undefined;
   const line = String(raw ?? "")
     .split("\n")
     .map((l) => l.trim())

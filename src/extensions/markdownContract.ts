@@ -40,6 +40,32 @@ export type HighlightCode = (code: string, lang: string) => string | null;
 
 export const highlightCodeKey = serviceKey<HighlightCode>("md:highlight-code");
 
+export type Appearance = "light" | "dark";
+
+export type MermaidResult = { readonly svg: string } | { readonly error: string };
+
+export interface MermaidParseError {
+  readonly line: number | null;
+  readonly message: string;
+}
+
+/**
+ * Mermaid rendering behind a lazily loaded library. `peek` is the synchronous
+ * cache lookup; `render` loads on first use and never rejects.
+ */
+export interface RenderMermaid {
+  peek(source: string, appearance: Appearance): MermaidResult | null;
+  render(source: string, appearance: Appearance): Promise<MermaidResult>;
+  /** Null when valid — and also when the library is not loaded yet (never loads it). */
+  parse(source: string): Promise<MermaidParseError | null>;
+  preload(): void;
+  isLoaded(): boolean;
+  /** Notifies once when the library finishes loading (editor re-lints). */
+  onLoaded(listener: () => void): () => void;
+}
+
+export const renderMermaidKey = serviceKey<RenderMermaid>("md:render-mermaid");
+
 export const mdParseKey = serviceKey<MdParse>("md:parse");
 export const mdAstCacheKey = serviceKey<MdAstCache>("md:ast-cache");
 export const mdOutlineCacheKey = serviceKey<MdOutlineCache>("md:outline-cache");

@@ -3,6 +3,7 @@ import { markdownExtension } from "./markdown";
 import { gfmExtension } from "./gfm";
 import { taskTicksExtension } from "./taskTicks";
 import { shikiExtension } from "./shiki";
+import { mermaidExtension } from "./mermaid";
 import { editorExtension } from "./editor";
 import { readerExtension } from "./reader";
 import { sidebarExtension } from "./sidebar";
@@ -27,6 +28,7 @@ export const builtinExtensions: readonly ExtensionDescriptor[] = [
   gfmExtension,
   taskTicksExtension,
   shikiExtension,
+  mermaidExtension,
   editorExtension,
   readerExtension,
   sidebarExtension,
