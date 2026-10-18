@@ -1781,3 +1781,24 @@ nav.mdr-explorer[data-drop="true"] {
   color: var(--mdr-color-fg-muted);
   cursor: pointer;
 }
+
+/* Mermaid lint markers in the editor */
+.cm-lintRange-error {
+  background-image: none;
+  text-decoration: underline wavy var(--mdr-syntax-string);
+  text-underline-offset: 3px;
+}
+
+.cm-tooltip-lint {
+  padding: var(--mdr-space-1) var(--mdr-space-2);
+  font: var(--mdr-text-caption);
+  color: var(--mdr-color-fg);
+  background: var(--mdr-color-bg-elevated);
+  border: 1px solid var(--mdr-color-separator);
+  border-radius: var(--mdr-radius);
+}
+
+.cm-tooltip-lint .cm-diagnostic-error {
+  border-left: 3px solid var(--mdr-syntax-string);
+  padding-left: var(--mdr-space-2);
+}

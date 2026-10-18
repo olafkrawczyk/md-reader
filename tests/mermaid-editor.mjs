@@ -149,8 +149,27 @@ async function typeAtEnd(page, text) {
   await page.keyboard.type(text, { delay: 30 });
 }
 
-check("mermaid fence is highlighted in the editor", async (page) => {
+const MERMAID_REQUEST = /node_modules\/.*mermaid|\.vite\/deps\/mermaid/;
+
+// Must run first: any reader render of a mermaid fence loads the library.
+check("opening in the editor does not load mermaid", async (page) => {
+  const requests = [];
+  page.on("request", (r) => {
+    if (MERMAID_REQUEST.test(r.url())) requests.push(r.url());
+  });
   await page.locator("button.mdr-primary-button", { hasText: "Open Folder…" }).click();
+  // Switch to Writing on a diagram-free doc, then open diag.md; the reader never renders it.
+  await page.locator(".mdr-explorer-row", { hasText: "Other.md" }).click();
+  await page.locator(".mdr-reader").waitFor();
+  await page.keyboard.press("Meta+e");
+  await page.locator(EDITOR).waitFor();
+  await page.locator(".mdr-explorer-row", { hasText: "diag.md" }).click();
+  await page.locator(".mdr-editor .cm-line", { hasText: "flowchart TD" }).waitFor();
+  await page.waitForTimeout(1500);
+  assert(requests.length === 0, `mermaid requested: ${requests.join(", ")}`);
+});
+
+check("mermaid fence is highlighted in the editor", async (page) => {
   await openInEditor(page, "diag.md");
   const plain = await page.locator(".mdr-editor .cm-line", { hasText: "Plain paragraph" }).evaluate(
     (el) => getComputedStyle(el).color,
@@ -172,6 +191,56 @@ check("other fences stay unhighlighted", async (page) => {
     ...[...el.querySelectorAll("span")].map((s) => getComputedStyle(s).color),
   ]);
   assert(colors.every((c) => c === plain), `js fence is colored: ${JSON.stringify(colors)} vs ${plain}`);
+});
+
+const errorLine = (page) =>
+  page.evaluate(() => {
+    const el = document.querySelector(".mdr-editor .cm-lintRange-error");
+    return el ? el.closest(".cm-line")?.textContent ?? "" : null;
+  });
+
+async function waitFor(page, fn, timeout, what) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await fn()) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+// Places the caret at the end of the diagram's 3rd body line ('  A["Start"] --> B').
+async function caretAtThirdBodyLine(page) {
+  await page.locator(".mdr-editor .cm-line", { hasText: 'A["Start"] --> B' }).click();
+  await page.keyboard.press("End");
+}
+
+check("edit inside a fence loads mermaid and marks the error line", async (page) => {
+  await openInEditor(page, "diag.md");
+  await caretAtThirdBodyLine(page);
+  await page.keyboard.type(" -->", { delay: 30 });
+  const edited = '  A["Start"] --> B -->';
+  await waitFor(page, async () => (await errorLine(page)) === edited, 3000, "error marker on edited line");
+  await page.locator(".mdr-editor .cm-lintRange-error").first().hover();
+  const tip = page.locator(".cm-tooltip-lint");
+  await tip.waitFor({ timeout: 2000 });
+  const text = await tip.innerText();
+  assert(/Parse error|Parsing failed/.test(text), `unexpected tooltip: ${text}`);
+});
+
+check("fixing the line clears the marker", async (page) => {
+  await caretAtThirdBodyLine(page);
+  for (let i = 0; i < 4; i++) await page.keyboard.press("Backspace");
+  await waitFor(page, async () => (await errorLine(page)) === null, 2000, "marker to clear");
+});
+
+check("valid diagram has no markers", async (page) => {
+  await openInEditor(page, "Other.md");
+  await openInEditor(page, "diag.md");
+  await page.locator(".mdr-editor .cm-line", { hasText: "Start" }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" ", { delay: 30 });
+  await page.waitForTimeout(2000);
+  assert((await errorLine(page)) === null, "unexpected lint marker on valid diagram");
 });
 
 check("typing a fence offers templates", async (page) => {

@@ -14,12 +14,13 @@ import { useService } from "../core/state/storeHooks";
 import { searchTargetRegistryKey } from "../core/search/searchTypes";
 import type { SearchTarget } from "../core/search/searchTypes";
 import type { Document } from "../core/workspace/document";
-import { mdOutlineCacheKey } from "./markdownContract";
+import { mdOutlineCacheKey, renderMermaidKey } from "./markdownContract";
 import { outlineNavigationKey, usePendingJump } from "./outline";
 import type { OutlineJumpTarget } from "./outline";
 import { createWikilinkCompletion } from "./links";
 import { linkIndexKey } from "./links";
-import { mermaidCodeLanguages, mermaidTemplateCompletion } from "./mermaidEditor";
+import type { RenderMermaid } from "./markdownContract";
+import { mermaidCodeLanguages, mermaidLinter, mermaidPreloadOnEdit, mermaidTemplateCompletion } from "./mermaidEditor";
 
 // Syntax colors ride --mdr-syntax-* variables, so a dark-appearance switch
 // restyles highlighting live without re-creating the editor.
@@ -229,6 +230,7 @@ function useCodeMirror(
   document: Document | null,
   onContentChanged: () => void,
   getLinkIndex: () => import("./links").LinkIndexService | null,
+  getMermaid: () => RenderMermaid | null,
 ): {
   readonly hostRef: RefObject<HTMLDivElement | null>;
   readonly getView: () => EditorView | null;
@@ -237,6 +239,7 @@ function useCodeMirror(
   const viewRef = useRef<EditorView | null>(null);
   const changedHandlerRef = useRef(onContentChanged);
   const linkIndexRef = useRef(getLinkIndex);
+  const mermaidRef = useRef(getMermaid);
   // Last text this view accounted for: its own edits and applied external
   // changes update it before the document notifies, so a mismatch in the
   // subscription unambiguously means "changed elsewhere".
@@ -245,6 +248,7 @@ function useCodeMirror(
   useEffect(() => {
     changedHandlerRef.current = onContentChanged;
     linkIndexRef.current = getLinkIndex;
+    mermaidRef.current = getMermaid;
   });
 
   useEffect(() => {
@@ -270,6 +274,8 @@ function useCodeMirror(
           findQueryField,
           findHighlighter,
           createWikilinkCompletion(() => linkIndexRef.current(), [mermaidTemplateCompletion]),
+          mermaidLinter(() => mermaidRef.current()),
+          mermaidPreloadOnEdit(() => mermaidRef.current()),
           keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
@@ -317,12 +323,15 @@ function EditorPane(api: ExtensionApi) {
     const targetRef = useRef<EditorSearchTarget | null>(null);
     const linkIndex = useService(api.services, linkIndexKey);
     const getLinkIndex = useCallback(() => linkIndex, [linkIndex]);
+    const mermaid = useService(api.services, renderMermaidKey);
+    const getMermaid = useCallback(() => mermaid, [mermaid]);
     const { hostRef, getView } = useCodeMirror(
       document,
       () => {
         targetRef.current?.refresh();
       },
       getLinkIndex,
+      getMermaid,
     );
     const registry = useService(api.services, searchTargetRegistryKey);
     const outlineNav = useService(api.services, outlineNavigationKey);
