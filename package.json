@@ -38,6 +38,7 @@
     "test:mermaid": "node tests/mermaid-render.mjs",
     "test:mermaid:syntax": "node tests/mermaid-syntax.mjs",
     "test:mermaid:service": "node tests/mermaid-service.mjs",
+    "test:mermaid:editor": "node tests/mermaid-editor.mjs",
     "test:mermaid:lazy": "node tests/mermaid-lazy.mjs",
     "test:menu": "node tests/menu-actions.mjs",
     "test:webkit": "node tests/webkit-apis.mjs",

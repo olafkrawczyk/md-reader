@@ -19,6 +19,7 @@ import { outlineNavigationKey, usePendingJump } from "./outline";
 import type { OutlineJumpTarget } from "./outline";
 import { createWikilinkCompletion } from "./links";
 import { linkIndexKey } from "./links";
+import { mermaidCodeLanguages, mermaidTemplateCompletion } from "./mermaidEditor";
 
 // Syntax colors ride --mdr-syntax-* variables, so a dark-appearance switch
 // restyles highlighting live without re-creating the editor.
@@ -31,6 +32,7 @@ const mdrHighlightStyle = HighlightStyle.define([
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.link, color: "var(--mdr-color-accent)", textDecoration: "underline" },
   { tag: [tags.meta, tags.processingInstruction], color: "var(--mdr-syntax-entity)" },
+  { tag: tags.operator, color: "var(--mdr-syntax-entity)" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
 ]);
 
@@ -261,13 +263,13 @@ function useCodeMirror(
           drawSelection(),
           dropCursor(),
           indentUnit.of("  "),
-          markdown(),
+          markdown({ codeLanguages: mermaidCodeLanguages }),
           history(),
           EditorView.lineWrapping,
           syntaxHighlighting(mdrHighlightStyle),
           findQueryField,
           findHighlighter,
-          createWikilinkCompletion(() => linkIndexRef.current()),
+          createWikilinkCompletion(() => linkIndexRef.current(), [mermaidTemplateCompletion]),
           keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {

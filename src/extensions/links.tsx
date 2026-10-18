@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { autocompletion } from "@codemirror/autocomplete";
-import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
+import type { CompletionContext, CompletionResult, CompletionSource } from "@codemirror/autocomplete";
 import type { ExtensionApi, ExtensionDescriptor } from "../core/extension";
 import { serviceKey, usePaneHost } from "../core/extension";
 import { useService, useStoreValue } from "../core/state/storeHooks";
@@ -605,9 +605,13 @@ export class LinkIndexServiceImpl implements LinkIndexService {
 // CodeMirror 6 Completion Extension (Task 2.7)
 // ---------------------------------------------------------------------------
 
-export function createWikilinkCompletion(getLinkIndex: () => LinkIndexService | null) {
+export function createWikilinkCompletion(
+  getLinkIndex: () => LinkIndexService | null,
+  extraSources: readonly CompletionSource[] = [],
+) {
   return autocompletion({
     override: [
+      ...extraSources,
       (context: CompletionContext): CompletionResult | null => {
         const word = context.matchBefore(/\[\[([^\]]*)/);
         if (!word) {
