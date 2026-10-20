@@ -263,6 +263,22 @@ check("typing a fence offers templates", async (page) => {
   assert(fences >= 3, `expected a closing fence line, saw ${fences}`);
 });
 
+check("bare fence then Enter opens a plain block", async (page) => {
+  await openInEditor(page, "diag.md");
+  await typeAtEnd(page, "\n```");
+  await page.waitForTimeout(400);
+  const shown = await page.locator(".cm-tooltip-autocomplete li").allTextContents();
+  assert(!shown.some((l) => l.includes("mermaid ·")), `templates offered: ${JSON.stringify(shown)}`);
+  const mermaidLines = async () =>
+    (await page.locator(".mdr-editor .cm-line").allTextContents()).filter((l) => l.includes("mermaid")).length;
+  const before = await mermaidLines();
+  await page.keyboard.press("Enter");
+  const lines = await page.locator(".mdr-editor .cm-line").allTextContents();
+  const i = lines.lastIndexOf("```");
+  assert(i >= 0 && lines[i + 1] === "" && i + 2 === lines.length, `unexpected doc: ${JSON.stringify(lines)}`);
+  assert((await mermaidLines()) === before, `template inserted: ${JSON.stringify(lines)}`);
+});
+
 check("closing fence offers no templates", async (page) => {
   await openInEditor(page, "open.md");
   await typeAtEnd(page, "\n```");

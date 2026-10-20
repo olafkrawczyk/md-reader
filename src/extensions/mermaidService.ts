@@ -20,7 +20,13 @@ function configFor(appearance: Appearance): Record<string, unknown> {
     startOnLoad: false,
     securityLevel: "strict",
     htmlLabels: false,
-    flowchart: { htmlLabels: false },
+    // Diagrams keep their natural size; a wide one scrolls inside its figure.
+    flowchart: { htmlLabels: false, useMaxWidth: false },
+    ...Object.fromEntries(
+      ["sequence", "class", "state", "er", "gantt", "journey", "pie", "mindmap", "gitGraph", "timeline"].map(
+        (k) => [k, { useMaxWidth: false }],
+      ),
+    ),
     theme: appearance === "dark" ? "dark" : "default",
   };
 }
@@ -49,7 +55,13 @@ export function createMermaidService(options: {
     loading ??= options.load().then(
       (m) => {
         mermaid = m;
-        for (const listener of [...listeners]) listener();
+        for (const listener of [...listeners]) {
+          try {
+            listener();
+          } catch {
+            // A throwing listener must not reject the load for everyone else.
+          }
+        }
         return m;
       },
       // Terminal: the memoized rejection is never retried.

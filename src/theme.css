@@ -910,7 +910,7 @@ nav.mdr-explorer[data-drop="true"] {
 }
 
 /* Mermaid diagrams (design D6): centered, never wider than the measure —
-   a diagram too wide to scale down scrolls inside its own figure. */
+   a diagram too wide for it scrolls inside its own figure. */
 .mdr-reader .mdr-mermaid {
   margin: 1em 0;
   max-width: 100%;
@@ -919,7 +919,7 @@ nav.mdr-explorer[data-drop="true"] {
 }
 
 .mdr-reader .mdr-mermaid svg {
-  max-width: 100%;
+  max-width: none;
   height: auto;
 }
 

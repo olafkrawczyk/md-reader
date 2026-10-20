@@ -65,7 +65,8 @@ for (const t of MERMAID_TEMPLATES) {
   assert.ok(!t.body.includes("```"), `${t.label} body has no fences`);
 }
 
-assert.ok(fenceOpenerPrefix("```", 0));
+assert.ok(!fenceOpenerPrefix("```", 0), "bare fence offers no template");
+assert.ok(fenceOpenerPrefix("```m", 0));
 assert.ok(fenceOpenerPrefix("```mer", 2));
 assert.ok(fenceOpenerPrefix("  ```MERMAID", 0));
 assert.ok(!fenceOpenerPrefix("```", 1), "closing an open block");

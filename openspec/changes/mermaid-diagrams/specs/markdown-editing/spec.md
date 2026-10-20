@@ -11,7 +11,7 @@ The editor SHALL highlight the contents of fenced code blocks declaring the lang
 
 ### Requirement: Mermaid template completion
 
-When the user types a code fence opener (```` ``` ````, optionally followed by a prefix of `mermaid`) at the start of a line that is not closing an existing block, the editor SHALL offer completions that insert a complete fenced mermaid block for each of: flowchart, sequence, class, state, ER, gantt, pie, and mindmap, placing the cursor in the first editable position.
+When the user types a code fence opener (```` ``` ```` followed by at least one letter of a prefix of `mermaid`, e.g. ```` ```m ````) at the start of a line that is not closing an existing block, the editor SHALL offer completions that insert a complete fenced mermaid block for each of: flowchart, sequence, class, state, ER, gantt, pie, and mindmap, placing the cursor in the first editable position.
 
 #### Scenario: Insert a sequence diagram
 

@@ -60,7 +60,7 @@ A second effect in `ReaderPane`, keyed on `[html, renderMermaid, appearance]`:
 2. **Synchronous cache pass:** for each block, `peek()`; on a hit, swap in immediately. This keeps unchanged diagrams stable across the per-keystroke re-render in Split View.
 3. **Lazy pass:** remaining blocks are observed with an `IntersectionObserver` (`rootMargin` ≈ one viewport height). Entering blocks are queued; the queue drains one `render()` at a time.
 4. **Debounce:** when the pass is triggered by a document *change* (not first open / appearance change), uncached renders wait 300 ms; a newer `html` cancels the pending pass (same `cancelled` flag pattern as the Shiki effect).
-5. **Replacement element:** `<figure class="mdr-mermaid" data-mermaid-source-hash="…">` containing the SVG. Copies `data-line`, `data-focus-unit`, and `is-focused` from the `<pre>`, as the Shiki pass does, so focus mode and outline/line jumps keep working.
+5. **Replacement element:** `<figure class="mdr-mermaid">` containing the SVG. Copies `data-line`, `data-focus-unit`, and `is-focused` from the `<pre>`, as the Shiki pass does, so focus mode and outline/line jumps keep working.
 6. **Errors:** on `{ error }`, the `<pre>` stays (or, if a previous render existed at the same block index during this editing session, that SVG is shown with `data-stale` dimming) and a `<figcaption class="mdr-mermaid-error">Mermaid: …</figcaption>` follows. "Last good render" is tracked per pane as `blockIndex → svg`, reset on document switch.
 7. The Shiki pass excludes `language-mermaid` from its `pending` list.
 
@@ -80,7 +80,7 @@ Wired as `markdown({ codeLanguages: (info) => (info.trim().toLowerCase() === "me
 
 ### D4: Editor — template completion
 
-A `CompletionSource` added to the existing `autocompletion({ override: [...] })` alongside wikilinks. It activates when the text from line start to cursor matches `^\s*```m?e?r?m?a?i?d?$` (i.e. a fence opener being typed, including bare ```` ``` ````). Options, labelled e.g. "mermaid · flowchart", each insert a full fenced skeleton via `snippet()` with the cursor placed on the first editable node, closing fence included:
+A `CompletionSource` added to the existing `autocompletion({ override: [...] })` alongside wikilinks. It activates when the text from line start to cursor matches `^\s*```(m|me|mer|merm|merma|mermai|mermaid)$` (i.e. a fence opener being typed with at least one letter; a bare ```` ``` ```` offers nothing, so Enter after it opens a plain block). Options, labelled e.g. "mermaid · flowchart", each insert a full fenced skeleton via `snippet()` with the cursor placed on the first editable node, closing fence included:
 
 flowchart, sequence, class, state, ER, gantt, pie, mindmap.
 

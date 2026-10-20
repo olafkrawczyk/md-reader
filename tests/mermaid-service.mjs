@@ -67,7 +67,10 @@ assert.deepEqual(fake.inits.map((c) => c.theme), ["default", "dark"]);
 assert.equal(fake.inits[0].securityLevel, "strict");
 assert.equal(fake.inits[0].htmlLabels, false);
 assert.equal(fake.inits[0].startOnLoad, false);
-assert.deepEqual(fake.inits[0].flowchart, { htmlLabels: false });
+assert.deepEqual(fake.inits[0].flowchart, { htmlLabels: false, useMaxWidth: false });
+for (const k of ["sequence", "class", "state", "er", "gantt", "journey", "pie", "mindmap", "gitGraph", "timeline"]) {
+  assert.equal(fake.inits[0][k].useMaxWidth, false, `${k} must not shrink to the measure`);
+}
 
 // errors cached, queue keeps going, temp cleanup on both paths
 fake.failOn("bad", Object.assign(new Error("Parse error on line 2:\n..."), { hash: { loc: { first_line: 2 } } }));
@@ -104,6 +107,18 @@ assert.equal(loadedEvents, 1);
   let late = 0;
   s.svc.onLoaded(() => late++);
   assert.equal(late, 0, "no retroactive call");
+}
+
+// a throwing onLoaded listener cannot break the load
+{
+  const s = setup();
+  s.svc.onLoaded(() => {
+    throw new Error("listener boom");
+  });
+  let after = 0;
+  s.svc.onLoaded(() => after++);
+  assert.deepEqual(await s.svc.render("x", "light"), { svg: "<svg>default:x</svg>" });
+  assert.equal(after, 1, "later listeners still run");
 }
 
 // preload loads without rendering

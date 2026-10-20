@@ -78,6 +78,27 @@ function mermaidFences(state: EditorState): MermaidFence[] {
   return fences;
 }
 
+// True when [from, to] touches the body of a mermaid fence. Touching its edges
+// counts: typing at either end is an edit of it.
+function touchesMermaidFence(state: EditorState, from: number, to: number): boolean {
+  let hit = false;
+  syntaxTree(state).iterate({
+    from,
+    to,
+    enter(node) {
+      if (hit) return false;
+      if (node.name !== "FencedCode") return;
+      const info = node.node.getChild("CodeInfo");
+      const text = node.node.getChild("CodeText");
+      if (info && text && isMermaidInfo(state.sliceDoc(info.from, info.to)) && from <= text.to && to >= text.from) {
+        hit = true;
+      }
+      return false;
+    },
+  });
+  return hit;
+}
+
 /**
  * Marks mermaid syntax errors on the offending line (the first body line when
  * mermaid reports none). Linting never loads the library: until it is loaded
@@ -118,14 +139,18 @@ export function mermaidPreloadOnEdit(getService: () => RenderMermaid | null): Ex
     return {
       update(update) {
         if (done || !update.docChanged) return;
-        const fences = mermaidFences(update.state);
+        const service = getService();
+        if (service === null) return;
+        if (service.isLoaded()) {
+          done = true;
+          return;
+        }
+        // Only the changed ranges are examined — O(change), not O(document).
         let inside = false;
         update.changes.iterChangedRanges((_fa, _ta, fromB, toB) => {
-          // Touching the fence's body edges counts: typing at either end is an edit of it.
-          if (fences.some((f) => fromB <= f.bodyTo && toB >= f.bodyFrom)) inside = true;
+          if (!inside && touchesMermaidFence(update.state, fromB, toB)) inside = true;
         });
-        const service = getService();
-        if (inside && service !== null) {
+        if (inside) {
           done = true;
           service.preload();
         }

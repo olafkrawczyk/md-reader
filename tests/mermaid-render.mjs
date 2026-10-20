@@ -273,10 +273,7 @@ check("wide diagram scrolls inside its figure", async (page) => {
   assert(m.docScroll <= m.inner, `page scrolls horizontally: ${JSON.stringify(m)}`);
   assert(m.paneScroll <= m.paneClient, `reader pane overflows horizontally: ${JSON.stringify(m)}`);
   assert(m.readerScroll <= m.readerClient, `reader overflows horizontally: ${JSON.stringify(m)}`);
-  assert(
-    m.figScroll > m.figClient || m.svgWidth <= m.figWidth + 0.5,
-    `diagram spills out of its figure: ${JSON.stringify(m)}`,
-  );
+  assert(m.figScroll > m.figClient, `wide diagram does not scroll inside its figure: ${JSON.stringify(m)}`);
 });
 
 check("appearance switch re-renders dark", async (page) => {

@@ -150,11 +150,11 @@ export const MERMAID_TEMPLATES: readonly { label: string; body: string }[] = [
 
 /**
  * True when `lineBefore` (line start to cursor) is a fence opener being typed
- * toward "mermaid" — and the fence count above is even, so this backtick run
+ * toward "mermaid" (at least one letter: a bare fence stays a plain block) — and the fence count above is even, so this backtick run
  * opens a block instead of closing one.
  */
 export function fenceOpenerPrefix(lineBefore: string, openFencesBefore: number): boolean {
-  const m = /^\s*```([a-z]*)$/i.exec(lineBefore);
+  const m = /^\s*```([a-z]+)$/i.exec(lineBefore);
   return !!m && "mermaid".startsWith(m[1]!.toLowerCase()) && openFencesBefore % 2 === 0;
 }
 
