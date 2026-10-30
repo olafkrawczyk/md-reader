@@ -6,13 +6,17 @@
 # The installed path is targeted explicitly (not `open -a`) so the
 # launcher never resolves to a stale build-output copy of the bundle.
 #
-# With a path argument the bundle's inner binary is executed directly so
+# With a path argument the bundle's inner binary is started directly so
 # the path reaches the app's own argument parser: `open` without --args
 # treats the argument as a document, and `open --args` drops it entirely
 # when an instance is already running. Relative paths (e.g. `.`) are
 # resolved against the caller's directory so the app receives an
 # absolute path. The app's single-instance guard forwards the path to
 # any running instance and exits the duplicate.
+#
+# That binary is detached from the terminal: its own process group, SIGHUP
+# ignored, stdio discarded. The shell returns immediately, and closing the
+# terminal does not quit the app.
 APP="/Applications/md-reader.app"
 BIN="$APP/Contents/MacOS/md-reader"
 
@@ -40,7 +44,13 @@ if [ "$#" -gt 0 ]; then
         *) args+=("$(cd "$arg" 2>/dev/null && pwd || printf '%s' "$PWD/$arg")") ;;
       esac
     done
-    exec "$BIN" "${args[@]}"
+    # Monitor mode puts the app in its own process group so Ctrl-C in the
+    # terminal does not reach it. nohup ignores SIGHUP when the terminal
+    # closes. disown lets this script exit without waiting on the app.
+    set -m
+    nohup "$BIN" "${args[@]}" </dev/null >/dev/null 2>&1 &
+    disown
+    exit 0
   fi
   exec open -a "$APP" --args "$@"
 fi
