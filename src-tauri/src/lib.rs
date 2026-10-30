@@ -108,6 +108,7 @@ pub fn run() {
             recents::recent_folders,
             report_spike_result,
             cli::take_pending_cli_open,
+            cli::terminal_setup,
             menu::set_workspace_menu_enabled,
             workspace::activate_workspace,
             workspace::set_ignored_directories,

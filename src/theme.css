@@ -1750,6 +1750,37 @@ nav.mdr-explorer[data-drop="true"] {
   white-space: nowrap;
 }
 
+.mdr-settings-terminal {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mdr-color-fg-muted);
+}
+
+.mdr-settings-terminal p {
+  margin: 0 0 6px;
+}
+
+.mdr-settings-terminal code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--mdr-color-fg);
+}
+
+.mdr-settings-terminal button {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--mdr-color-accent);
+  cursor: pointer;
+}
+
+.mdr-settings-terminal button:hover {
+  text-decoration: underline;
+}
+
 .mdr-settings-version {
   margin: 16px 0 0;
   font-size: 12px;

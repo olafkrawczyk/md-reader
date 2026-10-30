@@ -63,6 +63,9 @@
     "createUpdaterArtifacts": true,
     "macOS": {
       "signingIdentity": "-"
+    },
+    "resources": {
+      "../scripts/launch-md-reader": "launch-md-reader"
     }
   }
 }

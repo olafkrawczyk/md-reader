@@ -25,7 +25,7 @@ async function waitForServer() {
 }
 
 /** Tauri bridge stub; `feed` drives the plugin:updater|check response. */
-function tauriStubInit({ folder, doc, feed }) {
+function tauriStubInit({ folder, doc, feed, terminalCommand }) {
   window.__calls = [];
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { registerListener: () => ({ id: 0 }), unregisterListener() {} };
   window.__TAURI_INTERNALS__ = {
@@ -54,6 +54,8 @@ function tauriStubInit({ folder, doc, feed }) {
           if (feed === "error") return Promise.reject(new Error("network unreachable"));
           if (feed === "none") return Promise.resolve(null);
           return Promise.resolve({ rid: 7, currentVersion: "0.2.0", version: "0.3.0", rawJson: {} });
+        case "terminal_setup":
+          return Promise.resolve(terminalCommand ? { command: terminalCommand } : null);
         default:
           return Promise.resolve(null);
       }
@@ -61,9 +63,10 @@ function tauriStubInit({ folder, doc, feed }) {
   };
 }
 
-async function openPage(browser, feed) {
+async function openPage(browser, feed, terminalCommand = null) {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
-  await context.addInitScript(tauriStubInit, { folder: FOLDER, doc: DOC, feed });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await context.addInitScript(tauriStubInit, { folder: FOLDER, doc: DOC, feed, terminalCommand });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -89,6 +92,20 @@ const CHECKS = {
     const { page } = await openPage(browser, "none");
     await page.locator('button[title="Settings"]').click();
     await page.locator(".mdr-settings-version", { hasText: "md-reader 0.2.0" }).waitFor({ timeout: 3000 });
+    assert((await page.locator(".mdr-settings-terminal").count()) === 0, "setup note shown when the command exists");
+  },
+  async "settings copies a terminal setup command when md-reader is missing"(browser) {
+    const command = "echo setup-md-reader";
+    const { page, errors } = await openPage(browser, "none", command);
+    await page.locator('button[title="Settings"]').click();
+    const note = page.locator(".mdr-settings-terminal");
+    await note.waitFor({ timeout: 3000 });
+    assert((await note.textContent()).includes("md-reader"), "note should name the command");
+    await note.getByRole("button", { name: "Copy setup command" }).click();
+    await note.getByRole("button", { name: "Copied" }).waitFor({ timeout: 3000 });
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    assert(copied === command, `clipboard: ${copied}`);
+    assert(errors.length === 0, errors.join("; "));
   },
   async "update available: notice installs and relaunches"(browser) {
     const { page, errors } = await openPage(browser, "available");
