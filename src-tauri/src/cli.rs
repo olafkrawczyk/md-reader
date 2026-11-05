@@ -34,13 +34,15 @@ impl LaunchQueue {
     }
 }
 
+/// Managed on the Builder, not in `setup`: on a cold launch macOS delivers
+/// Finder's open event before `setup` runs.
+#[derive(Default)]
 pub struct CliState(Mutex<LaunchQueue>);
 
-/// Registers state and captures the launch-time path argument. The frontend
-/// is not ready during setup, so the payload is stored and pulled by the
-/// frontend once loaded (see `take_pending_cli_open`).
+/// Captures the launch-time path argument. The frontend is not ready during
+/// setup, so the payload is stored and pulled by the frontend once loaded
+/// (see `take_pending_cli_open`).
 pub fn init(app: &mut tauri::App) {
-    app.manage(CliState(Mutex::new(LaunchQueue::default())));
     if let Ok(matches) = app.cli().matches() {
         if let Some(ArgData { value, .. }) = matches.args.get(PATH_ARG) {
             if let Some(arg) = value.as_str() {

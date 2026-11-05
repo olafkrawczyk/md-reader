@@ -91,6 +91,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             cli::handle_forwarded(app, argv, cwd);
         }))
+        .manage(cli::CliState::default())
         .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
