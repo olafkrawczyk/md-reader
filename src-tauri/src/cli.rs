@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Manager, Url};
 use tauri_plugin_cli::ArgData;
 use tauri_plugin_cli::CliExt;
 
@@ -19,24 +19,79 @@ pub struct CliOpen {
     pub kind: String,
 }
 
-pub struct CliState(Mutex<Option<CliOpen>>);
+/// Launch paths waiting for the frontend. Once the frontend has pulled the
+/// queue it is `ready`, and later opens are emitted as events instead.
+#[derive(Default)]
+pub struct LaunchQueue {
+    pending: Option<CliOpen>,
+    ready: bool,
+}
+
+impl LaunchQueue {
+    fn take(&mut self) -> Option<CliOpen> {
+        self.ready = true;
+        self.pending.take()
+    }
+}
+
+pub struct CliState(Mutex<LaunchQueue>);
 
 /// Registers state and captures the launch-time path argument. The frontend
 /// is not ready during setup, so the payload is stored and pulled by the
 /// frontend once loaded (see `take_pending_cli_open`).
 pub fn init(app: &mut tauri::App) {
-    app.manage(CliState(Mutex::new(None)));
+    app.manage(CliState(Mutex::new(LaunchQueue::default())));
     if let Ok(matches) = app.cli().matches() {
         if let Some(ArgData { value, .. }) = matches.args.get(PATH_ARG) {
             if let Some(arg) = value.as_str() {
                 let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                 if let Some(open) = resolve(arg, &cwd) {
-                    if let Ok(mut pending) = app.state::<CliState>().0.lock() {
-                        *pending = Some(open);
+                    if let Ok(mut queue) = app.state::<CliState>().0.lock() {
+                        queue.pending = Some(open);
                     }
                 }
             }
         }
+    }
+}
+
+/// Finder ("Open With", double-click, default app) delivers documents as an
+/// Apple open event, not argv. Only the first file is opened.
+pub fn handle_opened(app: &tauri::AppHandle, urls: &[Url]) {
+    let Some(path) = first_file_path(urls) else {
+        return;
+    };
+    let Some(open) = resolve(&path.to_string_lossy(), Path::new("/")) else {
+        return;
+    };
+    let Some(state) = app.try_state::<CliState>() else {
+        return;
+    };
+    let routed = match state.0.lock() {
+        Ok(mut queue) => route_opened(&mut queue, open),
+        Err(_) => return,
+    };
+    if let Some(open) = routed {
+        use tauri::Emitter;
+        focus_main_window(app);
+        let _ = app.emit(CLI_OPEN_EVENT, open);
+    }
+}
+
+fn first_file_path(urls: &[Url]) -> Option<PathBuf> {
+    urls.iter()
+        .filter(|url| url.scheme() == "file")
+        .find_map(|url| url.to_file_path().ok())
+}
+
+/// Queues the open until the frontend is ready; afterwards hands it back
+/// for emitting.
+fn route_opened(queue: &mut LaunchQueue, open: CliOpen) -> Option<CliOpen> {
+    if queue.ready {
+        Some(open)
+    } else {
+        queue.pending = Some(open);
+        None
     }
 }
 
@@ -86,7 +141,7 @@ fn focus_main_window(app: &tauri::AppHandle) {
 #[tauri::command]
 pub fn take_pending_cli_open(app: tauri::AppHandle) -> Option<CliOpen> {
     let state = app.state::<CliState>();
-    state.0.lock().ok().and_then(|mut pending| pending.take())
+    state.0.lock().ok().and_then(|mut queue| queue.take())
 }
 
 #[derive(Clone, Serialize)]
@@ -237,9 +292,50 @@ fn parse_user_shell(output: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_launcher, parse_user_shell, setup_command, shell_finds, shell_single_quote};
+    use super::{
+        find_launcher, first_file_path, parse_user_shell, route_opened, setup_command,
+        shell_finds, shell_single_quote, CliOpen, LaunchQueue,
+    };
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+    use tauri::Url;
+
+    fn open(path: &str) -> CliOpen {
+        CliOpen {
+            path: path.to_string(),
+            kind: "file".to_string(),
+        }
+    }
+
+    #[test]
+    fn first_file_path_takes_the_first_file_url() {
+        let urls = vec![
+            Url::parse("https://example.com/a.md").unwrap(),
+            Url::parse("file:///Users/me/My%20Notes/a.md").unwrap(),
+            Url::parse("file:///Users/me/b.md").unwrap(),
+        ];
+        assert_eq!(
+            first_file_path(&urls),
+            Some(PathBuf::from("/Users/me/My Notes/a.md"))
+        );
+        assert_eq!(first_file_path(&[]), None);
+    }
+
+    #[test]
+    fn opened_before_the_frontend_is_ready_is_queued() {
+        let mut queue = LaunchQueue::default();
+        assert!(route_opened(&mut queue, open("/a.md")).is_none());
+        assert_eq!(queue.take().map(|o| o.path), Some("/a.md".to_string()));
+    }
+
+    #[test]
+    fn opened_after_the_frontend_is_ready_is_emitted() {
+        let mut queue = LaunchQueue::default();
+        assert!(queue.take().is_none());
+        let routed = route_opened(&mut queue, open("/a.md"));
+        assert_eq!(routed.map(|o| o.path), Some("/a.md".to_string()));
+        assert!(queue.take().is_none());
+    }
 
     #[test]
     fn quotes_paths_for_the_shell() {

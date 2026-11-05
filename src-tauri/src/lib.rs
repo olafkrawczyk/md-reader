@@ -121,6 +121,12 @@ pub fn run() {
             workspace::delete_entry,
             workspace::workspace_search
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = event {
+                cli::handle_opened(app, &urls);
+            }
+        });
 }

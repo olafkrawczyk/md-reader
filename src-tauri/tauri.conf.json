@@ -61,6 +61,16 @@
       "icons/icon.ico"
     ],
     "createUpdaterArtifacts": true,
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "contentTypes": ["net.daringfireball.markdown"],
+        "mimeType": "text/markdown",
+        "name": "Markdown Document",
+        "role": "Editor",
+        "rank": "Default"
+      }
+    ],
     "macOS": {
       "signingIdentity": "-"
     },
