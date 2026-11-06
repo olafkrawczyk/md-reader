@@ -48,7 +48,8 @@
     "test:focus:code": "node tests/focus-code-highlight.mjs",
     "test:quickopen": "node tests/quick-open.mjs",
     "test:quickopen:ui": "node tests/quick-open-ui.mjs",
-    "test:updates": "node tests/updates-and-dblclick.mjs"
+    "test:updates": "node tests/updates-and-dblclick.mjs",
+    "test:cliopen": "node tests/cli-open-status.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

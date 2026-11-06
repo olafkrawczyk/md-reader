@@ -39,10 +39,15 @@ function parentDir(path: string): string {
  * A file opens in the context of its parent folder (sidebar shows sibling
  * files); a folder becomes the workspace itself.
  */
-async function openFromCli(api: ExtensionApi, payload: CliOpen): Promise<void> {
+async function openFromCli(
+  api: ExtensionApi,
+  dispatch: Dispatch<AppShellAction>,
+  payload: CliOpen,
+): Promise<void> {
   const target = payload.kind === "folder" ? payload.path : parentDir(payload.path);
   await api.workspace.openFolder(target);
   api.layout.activateDefault(api.presets.all());
+  dispatch({ type: "statusCleared" });
   if (payload.kind === "file") {
     await tabs.open(payload.path);
   }
@@ -156,7 +161,7 @@ export function useExtensionActivation(
       })
       .then((pending) => {
         if (!cancelled && pending != null) {
-          return openFromCli(api, pending).catch((err: unknown) => {
+          return openFromCli(api, dispatch, pending).catch((err: unknown) => {
             showError(dispatch, err);
           });
         } else if (!cancelled) {
@@ -208,7 +213,7 @@ export function useCliOpenEvents(
     let unlisten: (() => void) | null = null;
     let cancelled = false;
     onCliOpen((payload) => {
-      openFromCli(api, payload).catch((err: unknown) => {
+      openFromCli(api, dispatch, payload).catch((err: unknown) => {
         showError(dispatch, err);
       });
     })
