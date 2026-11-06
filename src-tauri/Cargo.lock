@@ -2258,7 +2258,7 @@ dependencies = [
 
 [[package]]
 name = "md-reader"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "notify",
  "rayon",
